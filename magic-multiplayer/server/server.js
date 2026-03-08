@@ -469,6 +469,21 @@ socket.on("create_room", ({ name, colors }) => {
     broadcastRoom(room);
   });
 
+  // ── Skip to End (pular combate / passar turno direto) ──
+  socket.on("skip_to_end", () => {
+    const code = socket.data.roomCode;
+    const idx = socket.data.playerIndex;
+    const room = rooms[code];
+    if (!room || room.turn !== idx) return;
+    // Avança fases até chegar no "end"
+    let safety = 0;
+    while (room.step !== "end" && safety++ < 10) {
+      advanceStep(room);
+    }
+    addLog(room, `⏭️ ${room.players[idx].name} passou o turno`, "info");
+    broadcastRoom(room);
+  });
+
   // ── Advance Step ──
   socket.on("advance_step", () => {
     const code = socket.data.roomCode;
