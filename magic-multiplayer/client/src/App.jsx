@@ -609,6 +609,12 @@ function Menu({name,setName,colors,setColors,code,setCode,error,onCreate,onJoin}
   return (
     <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 40%,#0c1828,#030710)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",gap:"22px",padding:"20px"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap');`}</style>
+      {/* Dalas Games logo */}
+      <div style={{position:"absolute",top:"22px",left:"50%",transform:"translateX(-50%)",display:"flex",alignItems:"center",gap:"10px"}}>
+        <div style={{fontSize:"22px"}}>🎮</div>
+        <div style={{fontFamily:"'Cinzel',serif",fontWeight:"900",fontSize:"14px",letterSpacing:".3em",background:"linear-gradient(90deg,#4a90d9,#a29bfe)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>Dalas Games</div>
+        <div style={{fontSize:"22px"}}>🎮</div>
+      </div>
       <div style={{fontSize:"62px",filter:"drop-shadow(0 0 40px #c9a84c)"}}>⚔️</div>
       <div style={{textAlign:"center"}}>
         <h1 style={{fontSize:"48px",fontWeight:"900",background:"linear-gradient(180deg,#f0d48a,#c9a84c)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:0,letterSpacing:".05em"}}>MAGIC</h1>
