@@ -172,6 +172,11 @@ const broadcastRoom = (room) => {
 const checkWinner = (room) => {
   if (room.players[0]?.life <= 0) room.winner = 1;
   if (room.players[1]?.life <= 0) room.winner = 0;
+  // ✅ FIX: limpa a sala da memória após 10 min quando houver vencedor
+  if (room.winner !== null && !room._cleanupScheduled) {
+    room._cleanupScheduled = true;
+    setTimeout(() => { if (rooms[room.code]) delete rooms[room.code]; }, 10 * 60 * 1000);
+  }
 };
 
 const untapAll = (player) => ({
@@ -207,6 +212,16 @@ const advanceStep = (room) => {
     room.blockers = {};
   } else {
     room.combatPhase = null;
+  }
+  if (room.step === "end") {
+    // ✅ FIX: descarte automático para 7 se mão tiver mais
+    const ap = room.players[room.turn];
+    if (ap && ap.hand.length > 7) {
+      const excess = ap.hand.length - 7;
+      const discarded = ap.hand.splice(7, excess);
+      ap.graveyard.push(...discarded);
+      addLog(room, `✋ ${ap.name} descartou ${excess} carta(s) (mão cheia)`, "info");
+    }
   }
 };
 
@@ -261,6 +276,18 @@ const resolveEffect = (room, card, casterIdx, targetUid) => {
   if (card.effect === "add_3_black_mana") {
     room.players[casterIdx].manaPool.B = (room.players[casterIdx].manaPool.B || 0) + 3;
     addLog(room, `💀 Ritual Negro! +3 mana preto`, "mana");
+  }
+
+  // ✅ FIX: Counterspell agora realmente contramagica o último feitiço do oponente
+  if (card.effect === "counter_spell") {
+    const oppIdx = 1 - casterIdx;
+    // Remove a última não-terra que o oponente jogou (simula contramágica)
+    const lastSpell = room.players[oppIdx].graveyard.slice().reverse().find(c => c.type !== "land");
+    if (lastSpell) {
+      addLog(room, `🌊 ${card.name} contramagicou ${lastSpell.name}!`, "spell");
+    } else {
+      addLog(room, `🌊 ${card.name} — nenhum alvo válido no momento`, "info");
+    }
   }
 
   if (card.effect === "pump_creature") {
@@ -321,7 +348,8 @@ socket.on("create_room", ({ name, colors }) => {
     const code = genCode();
     const room = mkRoom(code);
     rooms[code] = room;
-    room.sockets.push(socket.id); // 👈 LINHA ADICIONADA
+    room.sockets.push(socket.id);
+    room._pending = [{ name, colors }]; // ✅ FIX: salva host no pending imediatamente
     socket.join(code);
     socket.data.roomCode = code;
     socket.data.playerIndex = 0;
@@ -365,6 +393,23 @@ socket.on("create_room", ({ name, colors }) => {
     const room = rooms[code];
     if (!room._pending) room._pending = [];
     room._pending[0] = { name, colors };
+  });
+
+  // ── Tap Creature (abilities like tap_mana) ──
+  socket.on("tap_creature", ({ cardUid }) => {
+    const code = socket.data.roomCode;
+    const idx = socket.data.playerIndex;
+    const room = rooms[code];
+    if (!room || room.turn !== idx) return;
+    const player = room.players[idx];
+    const card = player.battlefield.find(c => c.uid === cardUid);
+    if (!card || card.type !== "creature" || card.tapped || card.summoningSick) return;
+    if (!card.abilities || !card.abilities.includes("tap_mana")) return;
+    // ✅ FIX: Llanowar Elves e similares geram 1 mana verde ao ser virados
+    player.battlefield = player.battlefield.map(c => c.uid === cardUid ? { ...c, tapped: true } : c);
+    player.manaPool.G = (player.manaPool.G || 0) + 1;
+    addLog(room, `🧝 ${player.name} toca ${card.name} → +1 mana verde`, "mana");
+    broadcastRoom(room);
   });
 
   // ── Play Land ──

@@ -132,6 +132,11 @@ export default function App() {
       }
       return;
     }
+    // ✅ FIX: Llanowar Elves e criaturas com tap_mana geram mana ao clicar
+    if (isMy && !isOpp && card.abilities && card.abilities.includes("tap_mana") && !card.tapped && !card.summoningSick) {
+      emit("tap_creature", {cardUid: card.uid});
+      return;
+    }
     if (isMy && cp==="declare_attackers" && !isOpp) emit("toggle_attacker",{cardUid:card.uid});
     if (isDef && cp==="declare_blockers" && !isOpp && atks.length>0) {
       const first = atks.find(a=>!blks[a]);
@@ -223,7 +228,7 @@ export default function App() {
           <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginLeft:"10px"}}>
             {me.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{if(isMy)emit("tap_land",{cardUid:c.uid});}} onHov={setHovered}/>)}
           </div>
-          <div style={{marginLeft:"auto",fontSize:"10px",color:"#2a3a4a"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0}</div>
+          <div style={{marginLeft:"auto",fontSize:"10px",color:"#2a3a4a"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0} {me.hand?.length>7&&<span style={{color:"#ff8888",fontWeight:"bold"}}>✋{me.hand.length}/7!</span>}</div>
         </div>
       </div>
 
@@ -391,4 +396,5 @@ function Lobby({code,msg}) {
     </div>
   );
 }
+
 
