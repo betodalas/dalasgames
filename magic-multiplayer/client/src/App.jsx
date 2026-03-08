@@ -4,22 +4,49 @@ import { io } from "socket.io-client";
 const SERVER_URL = process.env.REACT_APP_SERVER_URL || "http://localhost:3001";
 
 const imageCache = {};
+const pendingFetches = {};
+
 const fetchCardImage = async (name) => {
-  if (imageCache[name] !== undefined) return imageCache[name];
-  imageCache[name] = null;
-  try {
-    // Tenta busca exata primeiro
-    let res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
-    if (!res.ok) {
-      // Fallback: busca fuzzy (encontra cartas com nome parecido)
+  if (imageCache[name]) return imageCache[name];
+  // Evita requisições duplicadas simultâneas
+  if (pendingFetches[name]) return pendingFetches[name];
+
+  const doFetch = async () => {
+    try {
+      // Busca exata
+      let res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const url = data?.image_uris?.normal
+          || data?.image_uris?.large
+          || data?.card_faces?.[0]?.image_uris?.normal
+          || null;
+        if (url) { imageCache[name] = url; return url; }
+      }
+      // Busca fuzzy como fallback
       res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`);
-    }
-    if (!res.ok) return null;
-    const data = await res.json();
-    const url = data?.image_uris?.normal || data?.card_faces?.[0]?.image_uris?.normal || null;
-    imageCache[name] = url;
-    return url;
-  } catch { return null; }
+      if (res.ok) {
+        const data = await res.json();
+        const url = data?.image_uris?.normal
+          || data?.image_uris?.large
+          || data?.card_faces?.[0]?.image_uris?.normal
+          || null;
+        if (url) { imageCache[name] = url; return url; }
+      }
+      // Busca por texto como último recurso
+      res = await fetch(`https://api.scryfall.com/cards/search?q=!"${encodeURIComponent(name)}"&unique=cards`);
+      if (res.ok) {
+        const data = await res.json();
+        const card = data?.data?.[0];
+        const url = card?.image_uris?.normal || card?.card_faces?.[0]?.image_uris?.normal || null;
+        if (url) { imageCache[name] = url; return url; }
+      }
+      return null;
+    } catch { return null; }
+  };
+
+  pendingFetches[name] = doFetch().finally(() => { delete pendingFetches[name]; });
+  return pendingFetches[name];
 };
 
 const COLOR_STYLES = {
@@ -58,41 +85,33 @@ const btn = (color, bg, big=false) => ({
 
 // ── Card Image ──
 function CardImage({ name, style={} }) {
-  const [url, setUrl] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [url, setUrl] = useState(() => imageCache[name] || null);
+  const [tries, setTries] = useState(0);
 
   useEffect(() => {
     if (!name) return;
-    // Reseta ao trocar de carta
+    // Se já tem no cache, usa direto
+    if (imageCache[name]) { setUrl(imageCache[name]); return; }
+
     setUrl(null);
-    setLoading(true);
-
-    // Se já está no cache, usa imediatamente
-    if (imageCache[name]) {
-      setUrl(imageCache[name]);
-      setLoading(false);
-      return;
-    }
-
     let cancelled = false;
+
     fetchCardImage(name).then(u => {
       if (cancelled) return;
-      setLoading(false);
-      if (u) setUrl(u);
+      if (u) {
+        setUrl(u);
+      } else if (tries < 2) {
+        // Tenta mais uma vez após 1.5s
+        setTimeout(() => { if (!cancelled) setTries(t => t + 1); }, 1500);
+      }
     });
     return () => { cancelled = true; };
-  }, [name]);
+  }, [name, tries]);
 
-  if (loading) return (
-    <div style={{width:"100%",height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"4px",...style}}>
-      <div style={{fontSize:"16px",animation:"pulse 1s infinite"}}>🃏</div>
-      <div style={{fontSize:"7px",color:"#4a6a8a",textAlign:"center",padding:"0 4px",lineHeight:"1.2"}}>{name}</div>
-    </div>
-  );
   if (!url) return (
-    <div style={{width:"100%",height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"4px",background:"rgba(0,0,0,.3)",...style}}>
-      <div style={{fontSize:"20px"}}>🃏</div>
-      <div style={{fontSize:"7px",color:"#6a8aaa",textAlign:"center",padding:"0 4px",lineHeight:"1.2",fontFamily:"serif"}}>{name}</div>
+    <div style={{width:"100%",height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"3px",background:"rgba(0,0,0,.2)",...style}}>
+      <div style={{fontSize:"18px",animation:"pulse 1.5s infinite"}}>🃏</div>
+      <div style={{fontSize:"7px",color:"#5a7a9a",textAlign:"center",padding:"0 4px",lineHeight:"1.3",fontFamily:"serif",wordBreak:"break-word"}}>{name}</div>
     </div>
   );
   return <img src={url} alt={name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",...style}} />;
@@ -208,7 +227,18 @@ export default function App() {
     const s = io(SERVER_URL, { transports:["websocket","polling"] });
     s.on("room_created", ({code}) => { setRoomCode(code); setWaitMsg(`Código: ${code}`); setScreen("lobby"); });
     s.on("waiting", ({msg}) => setWaitMsg(msg));
-    s.on("game_state", (state) => { setMyIndex(state.myIndex); setGs(state); setScreen("game"); });
+    s.on("game_state", (state) => {
+      setMyIndex(state.myIndex);
+      setGs(state);
+      setScreen("game");
+      // Pré-carrega imagens de todas as cartas visíveis
+      const allCards = state.players.flatMap(p => [
+        ...( p.hand || []),
+        ...(p.battlefield || []),
+      ]);
+      const names = [...new Set(allCards.map(c => c.name).filter(Boolean))];
+      names.forEach(name => { if (!imageCache[name]) fetchCardImage(name); });
+    });
     s.on("error", ({msg}) => { if (msg !== "Sala cheia!") showError(msg); });
     s.on("rejoin_failed", () => {
       // Sala não existe mais, limpa sessão e volta pro menu
