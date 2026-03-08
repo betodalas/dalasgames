@@ -317,10 +317,11 @@ io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
 
   // ── Create Room ──
-  socket.on("create_room", ({ name, colors }) => {
+socket.on("create_room", ({ name, colors }) => {
     const code = genCode();
     const room = mkRoom(code);
     rooms[code] = room;
+    room.sockets.push(socket.id); // 👈 LINHA ADICIONADA
     socket.join(code);
     socket.data.roomCode = code;
     socket.data.playerIndex = 0;
