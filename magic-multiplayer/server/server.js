@@ -341,6 +341,31 @@ const resolveCombat = (room) => {
 io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
 
+  // ── Rejoin Room (reconexão após reload) ──
+  socket.on("rejoin_room", ({ code, name }) => {
+    const room = rooms[code?.toUpperCase()];
+    if (!room || room.players.length < 1) {
+      socket.emit("rejoin_failed");
+      return;
+    }
+    // Encontra o jogador pelo nome
+    const idx = room.players.findIndex(p => p.name === name);
+    if (idx === -1) {
+      socket.emit("rejoin_failed");
+      return;
+    }
+    // Reconecta o socket ao jogador
+    const oldSocketId = room.sockets[idx];
+    room.sockets[idx] = socket.id;
+    room.players[idx].socketId = socket.id;
+    socket.join(code.toUpperCase());
+    socket.data.roomCode = code.toUpperCase();
+    socket.data.playerIndex = idx;
+    addLog(room, `🔁 ${name} reconectou!`, "system");
+    broadcastRoom(room);
+    console.log(`${name} rejoined room ${code}`);
+  });
+
   // ── Create Room ──
 socket.on("create_room", ({ name, colors }) => {
     const code = genCode();
