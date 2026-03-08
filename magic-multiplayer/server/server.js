@@ -574,4 +574,3 @@ app.get("/", (req, res) => res.json({ status: "ok", rooms: Object.keys(rooms).le
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => console.log(`🧙 Magic Server running on port ${PORT}`));
-
