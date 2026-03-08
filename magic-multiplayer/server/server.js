@@ -301,33 +301,33 @@ const resolveEffect = (room, card, casterIdx, targetUid) => {
 };
 
 const resolveCombat = (room) => {
-  const attackingPlayer = room.players[room.turn];
-  const defendingPlayer = room.players[1 - room.turn];
+  const atkIdx = room.turn;
+  const defIdx = 1 - room.turn;
 
   room.attackers.forEach(atkUid => {
-    const attacker = attackingPlayer.battlefield.find(c => c.uid === atkUid);
+    const attacker = room.players[atkIdx].battlefield.find(c => c.uid === atkUid);
     if (!attacker) return;
     const blockerUid = room.blockers[atkUid];
 
     if (blockerUid) {
-      const blocker = defendingPlayer.battlefield.find(c => c.uid === blockerUid);
+      const blocker = room.players[defIdx].battlefield.find(c => c.uid === blockerUid);
       if (!blocker) return;
       const ad = attacker.power || 0, bd = blocker.power || 0;
       addLog(room, `💥 ${attacker.name}(${ad}) vs ${blocker.name}(${bd})`, "combat");
       if (ad >= (blocker.toughness || 0)) {
-        defendingPlayer.battlefield = defendingPlayer.battlefield.filter(c => c.uid !== blockerUid);
-        defendingPlayer.graveyard.push(blocker);
+        room.players[defIdx].battlefield = room.players[defIdx].battlefield.filter(c => c.uid !== blockerUid);
+        room.players[defIdx].graveyard.push(blocker);
         addLog(room, `💀 ${blocker.name} morre!`, "destroy");
       }
       if (bd >= (attacker.toughness || 0)) {
-        attackingPlayer.battlefield = attackingPlayer.battlefield.filter(c => c.uid !== atkUid);
-        attackingPlayer.graveyard.push(attacker);
+        room.players[atkIdx].battlefield = room.players[atkIdx].battlefield.filter(c => c.uid !== atkUid);
+        room.players[atkIdx].graveyard.push(attacker);
         addLog(room, `💀 ${attacker.name} morre!`, "destroy");
       }
     } else {
       const dmg = attacker.power || 0;
-      defendingPlayer.life -= dmg;
-      addLog(room, `🗡️ ${attacker.name} causa ${dmg} dano direto! (${defendingPlayer.name}: ${defendingPlayer.life} vida)`, "combat");
+      room.players[defIdx].life -= dmg;
+      addLog(room, `🗡️ ${attacker.name} causa ${dmg} dano! (${room.players[defIdx].name}: ${room.players[defIdx].life} ❤️)`, "combat");
     }
   });
 
