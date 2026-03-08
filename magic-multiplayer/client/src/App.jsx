@@ -6,9 +6,15 @@ const SERVER_URL = process.env.REACT_APP_SERVER_URL || "http://localhost:3001";
 const imageCache = {};
 const fetchCardImage = async (name) => {
   if (imageCache[name] !== undefined) return imageCache[name];
-  imageCache[name] = null; // prevent duplicate requests
+  imageCache[name] = null;
   try {
-    const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+    // Tenta busca exata primeiro
+    let res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+    if (!res.ok) {
+      // Fallback: busca fuzzy (encontra cartas com nome parecido)
+      res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`);
+    }
+    if (!res.ok) return null;
     const data = await res.json();
     const url = data?.image_uris?.normal || data?.card_faces?.[0]?.image_uris?.normal || null;
     imageCache[name] = url;
@@ -53,10 +59,28 @@ const btn = (color, bg, big=false) => ({
 // ── Card Image ──
 function CardImage({ name, style={} }) {
   const [url, setUrl] = useState(imageCache[name] || null);
+  const [loading, setLoading] = useState(!imageCache[name]);
   useEffect(() => {
-    if (!url && name) fetchCardImage(name).then(u => { if (u) setUrl(u); });
+    if (!url && name) {
+      setLoading(true);
+      fetchCardImage(name).then(u => {
+        setLoading(false);
+        if (u) setUrl(u);
+      });
+    }
   }, [name]);
-  if (!url) return <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"28px",...style}}>🃏</div>;
+  if (loading) return (
+    <div style={{width:"100%",height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"4px",...style}}>
+      <div style={{fontSize:"16px",animation:"pulse 1s infinite"}}>🃏</div>
+      <div style={{fontSize:"7px",color:"#4a6a8a",textAlign:"center",padding:"0 4px",lineHeight:"1.2"}}>{name}</div>
+    </div>
+  );
+  if (!url) return (
+    <div style={{width:"100%",height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"4px",background:"rgba(0,0,0,.3)",...style}}>
+      <div style={{fontSize:"20px"}}>🃏</div>
+      <div style={{fontSize:"7px",color:"#6a8aaa",textAlign:"center",padding:"0 4px",lineHeight:"1.2",fontFamily:"serif"}}>{name}</div>
+    </div>
+  );
   return <img src={url} alt={name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",...style}} />;
 }
 
@@ -291,7 +315,7 @@ export default function App() {
           {me.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="my"} onClick={()=>clickCreature(c,false)} onHov={setHovered}/>)}
         </div>
         {/* Panel */}
-        <div style={{width:"215px",flexShrink:0,display:"flex",flexDirection:"column",gap:"7px",justifyContent:"center"}}>
+        <div style={{width:"245px",flexShrink:0,display:"flex",flexDirection:"column",gap:"7px",justifyContent:"center"}}>
           <Steps step={step} turn={gs.turn} tn={gs.turnNumber} mi={myIndex}/>
           <Mana pool={me.manaPool}/>
           {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"5px",padding:"5px 9px",fontSize:"11px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
@@ -438,9 +462,9 @@ function Steps({step, turn, tn, mi}) {
         ))}
       </div>
       {/* Caixa de descrição da fase atual */}
-      <div style={{marginTop:"6px",background:"rgba(0,0,0,.5)",border:`1px solid ${STEP_COLORS[tooltip||step]||"#1a2a3a"}`,borderRadius:"6px",padding:"5px 7px",fontSize:"10px",color:"#8ab0c8",lineHeight:"1.4",minHeight:"36px",transition:"border-color .2s"}}>
-        <span style={{color:STEP_COLORS[tooltip||step],fontWeight:"600"}}>{STEP_LABELS[tooltip||step]}</span>
-        <br/>{STEP_DESC[tooltip||step]}
+      <div style={{marginTop:"6px",background:"rgba(0,0,0,.5)",border:`1px solid ${STEP_COLORS[tooltip||step]||"#1a2a3a"}`,borderRadius:"6px",padding:"6px 8px",fontSize:"9px",color:"#8ab0c8",lineHeight:"1.5",minHeight:"42px",transition:"border-color .2s",wordBreak:"break-word",overflowWrap:"break-word",textAlign:"left"}}>
+        <div style={{color:STEP_COLORS[tooltip||step],fontWeight:"700",fontSize:"10px",marginBottom:"2px"}}>{STEP_LABELS[tooltip||step]}</div>
+        <div>{STEP_DESC[tooltip||step]}</div>
       </div>
     </div>
   );
