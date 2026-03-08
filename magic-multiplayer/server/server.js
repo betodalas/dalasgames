@@ -226,36 +226,36 @@ const advanceStep = (room) => {
 };
 
 const resolveEffect = (room, card, casterIdx, targetUid) => {
-  const opp = room.players[1 - casterIdx];
-  const caster = room.players[casterIdx];
+  const oppIdx = 1 - casterIdx;
 
+  // ✅ FIX: sempre lê e escreve via room.players[idx] para garantir persistência
   if (card.effect === "deal_3_damage" || card.effect === "deal_4_damage") {
     const dmg = card.effect === "deal_3_damage" ? 3 : 4;
-    const tgt = opp.battlefield.find(c => c.uid === targetUid);
+    const tgt = room.players[oppIdx].battlefield.find(c => c.uid === targetUid);
     if (tgt) {
-      opp.battlefield = opp.battlefield
+      room.players[oppIdx].battlefield = room.players[oppIdx].battlefield
         .map(c => c.uid === targetUid ? { ...c, damage: (c.damage || 0) + dmg } : c)
         .filter(c => (c.toughness || 0) > (c.damage || 0));
       addLog(room, `⚡ ${card.name} causa ${dmg} dano a ${tgt.name}`, "combat");
     } else {
-      opp.life -= dmg;
-      addLog(room, `⚡ ${card.name} causa ${dmg} dano direto!`, "combat");
+      room.players[oppIdx].life -= dmg;
+      addLog(room, `⚡ ${card.name} causa ${dmg} dano direto! (${room.players[oppIdx].name} agora tem ${room.players[oppIdx].life} de vida)`, "combat");
     }
   }
 
   if (card.effect === "destroy_creature") {
-    const tgt = opp.battlefield.find(c => c.uid === targetUid);
+    const tgt = room.players[oppIdx].battlefield.find(c => c.uid === targetUid);
     if (tgt) {
-      opp.battlefield = opp.battlefield.filter(c => c.uid !== targetUid);
-      opp.graveyard.push(tgt);
+      room.players[oppIdx].battlefield = room.players[oppIdx].battlefield.filter(c => c.uid !== targetUid);
+      room.players[oppIdx].graveyard.push(tgt);
       addLog(room, `☠️ ${tgt.name} destruído por ${card.name}!`, "destroy");
     }
   }
 
   if (card.effect === "exile_creature") {
-    const tgt = opp.battlefield.find(c => c.uid === targetUid);
+    const tgt = room.players[oppIdx].battlefield.find(c => c.uid === targetUid);
     if (tgt) {
-      opp.battlefield = opp.battlefield.filter(c => c.uid !== targetUid);
+      room.players[oppIdx].battlefield = room.players[oppIdx].battlefield.filter(c => c.uid !== targetUid);
       addLog(room, `✨ ${tgt.name} exilado por ${card.name}!`, "exile");
     }
   }
@@ -270,7 +270,7 @@ const resolveEffect = (room, card, casterIdx, targetUid) => {
 
   if (card.effect === "draw_3") {
     room.players[casterIdx] = drawCards(room.players[casterIdx], 3);
-    addLog(room, `🧠 ${caster.name} compra 3 cartas!`, "draw");
+    addLog(room, `🧠 ${room.players[casterIdx].name} compra 3 cartas!`, "draw");
   }
 
   if (card.effect === "add_3_black_mana") {
@@ -280,8 +280,6 @@ const resolveEffect = (room, card, casterIdx, targetUid) => {
 
   // ✅ FIX: Counterspell agora realmente contramagica o último feitiço do oponente
   if (card.effect === "counter_spell") {
-    const oppIdx = 1 - casterIdx;
-    // Remove a última não-terra que o oponente jogou (simula contramágica)
     const lastSpell = room.players[oppIdx].graveyard.slice().reverse().find(c => c.type !== "land");
     if (lastSpell) {
       addLog(room, `🌊 ${card.name} contramagicou ${lastSpell.name}!`, "spell");
@@ -292,9 +290,9 @@ const resolveEffect = (room, card, casterIdx, targetUid) => {
 
   if (card.effect === "pump_creature") {
     const p = card.pump || { power: 3, toughness: 3 };
-    const tgt = caster.battlefield.find(c => c.uid === targetUid);
+    const tgt = room.players[casterIdx].battlefield.find(c => c.uid === targetUid);
     if (tgt) {
-      room.players[casterIdx].battlefield = caster.battlefield.map(c =>
+      room.players[casterIdx].battlefield = room.players[casterIdx].battlefield.map(c =>
         c.uid === targetUid ? { ...c, power: (c.power || 0) + p.power, toughness: (c.toughness || 0) + p.toughness } : c
       );
       addLog(room, `💪 ${tgt.name} +${p.power}/+${p.toughness}!`, "buff");
@@ -329,7 +327,7 @@ const resolveCombat = (room) => {
     } else {
       const dmg = attacker.power || 0;
       defendingPlayer.life -= dmg;
-      addLog(room, `🗡️ ${attacker.name} causa ${dmg} dano direto!`, "combat");
+      addLog(room, `🗡️ ${attacker.name} causa ${dmg} dano direto! (${defendingPlayer.name}: ${defendingPlayer.life} vida)`, "combat");
     }
   });
 
@@ -576,3 +574,4 @@ app.get("/", (req, res) => res.json({ status: "ok", rooms: Object.keys(rooms).le
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => console.log(`🧙 Magic Server running on port ${PORT}`));
+

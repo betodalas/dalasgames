@@ -60,6 +60,79 @@ function CardImage({ name, style={} }) {
   return <img src={url} alt={name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",...style}} />;
 }
 
+// ── Traduções para português ──
+const CARD_PT = {
+  "Serra Angel":       { nome:"Serra Angel",         tipo:"Criatura — Anjo" },
+  "Savannah Lions":    { nome:"Leões de Savannah",   tipo:"Criatura — Felino" },
+  "Wrath of God":      { nome:"Ira de Deus",         tipo:"Feitiço" },
+  "Swords to Plowshares": { nome:"Espadas em Arados", tipo:"Instantâneo" },
+  "White Knight":      { nome:"Cavaleiro Branco",    tipo:"Criatura — Cavaleiro" },
+  "Counterspell":      { nome:"Contrafeitiço",       tipo:"Instantâneo" },
+  "Air Elemental":     { nome:"Elemental do Ar",     tipo:"Criatura — Elemental" },
+  "Brainstorm":        { nome:"Tempestade Mental",   tipo:"Instantâneo" },
+  "Dark Ritual":       { nome:"Ritual Negro",        tipo:"Instantâneo" },
+  "Hypnotic Specter":  { nome:"Espectro Hipnótico",  tipo:"Criatura — Espectro" },
+  "Terror":            { nome:"Terror",              tipo:"Instantâneo" },
+  "Lord of the Pit":   { nome:"Senhor do Abismo",    tipo:"Criatura — Demônio" },
+  "Lightning Bolt":    { nome:"Raio",                tipo:"Instantâneo" },
+  "Shivan Dragon":     { nome:"Dragão de Shivan",    tipo:"Criatura — Dragão" },
+  "Fireball":          { nome:"Bola de Fogo",        tipo:"Feitiço" },
+  "Goblin Raider":     { nome:"Saqueador Goblin",    tipo:"Criatura — Goblin" },
+  "Giant Growth":      { nome:"Crescimento Gigante", tipo:"Instantâneo" },
+  "Craw Wurm":         { nome:"Verme Craw",          tipo:"Criatura — Verme" },
+  "Llanowar Elves":    { nome:"Elfos de Llanowar",   tipo:"Criatura — Elfo Druida" },
+  "Force of Nature":   { nome:"Força da Natureza",   tipo:"Criatura — Elemental" },
+  "Plains":            { nome:"Planície",            tipo:"Terra Básica" },
+  "Island":            { nome:"Ilha",                tipo:"Terra Básica" },
+  "Swamp":             { nome:"Pântano",             tipo:"Terra Básica" },
+  "Mountain":          { nome:"Montanha",            tipo:"Terra Básica" },
+  "Forest":            { nome:"Floresta",            tipo:"Terra Básica" },
+};
+
+const ABILITY_PT = {
+  flying:       "🦅 Voar",
+  vigilance:    "👁️ Vigilância",
+  first_strike: "⚡ Ataque Duplo",
+  haste:        "💨 Ímpeto",
+  trample:      "🐾 Atropelar",
+  tap_mana:     "🌿 Produz Mana",
+};
+
+const EFFECT_PT = {
+  destroy_all_creatures: "💥 Destrói todas as criaturas.",
+  exile_creature:        "✨ Exila uma criatura alvo.",
+  destroy_creature:      "☠️ Destrói uma criatura alvo.",
+  deal_3_damage:         "⚡ Causa 3 pontos de dano a qualquer alvo.",
+  deal_4_damage:         "🔥 Causa 4 pontos de dano a qualquer alvo.",
+  draw_3:                "🧠 Compre 3 cartas.",
+  add_3_black_mana:      "💀 Adicione 3 manas pretos à sua reserva.",
+  pump_creature:         "💪 Criatura alvo recebe +3/+3 até o fim do turno.",
+  counter_spell:         "🌊 Contramagica um feitiço alvo.",
+};
+
+const MANA_NOME = { W:"Branco", U:"Azul", B:"Preto", R:"Vermelho", G:"Verde" };
+const RARITY_PT = { common:"◆ Comum", uncommon:"◆◆ Incomum", rare:"◆◆◆ Rara" };
+
+const MANA_ICON = { W:"☀️", U:"💧", B:"💀", R:"🔥", G:"🌿" };
+
+const tipoPT = (card) => {
+  if (card.type==="land") return "Terra";
+  if (card.type==="creature") return `Criatura${card.subtype?" — "+card.subtype:""}`;
+  if (card.type==="instant") return "Instantâneo";
+  if (card.type==="sorcery") return "Feitiço";
+  return card.type;
+};
+
+const custoIcones = (cost) => {
+  const icons = [];
+  for (const [k,v] of Object.entries(cost)) {
+    if (typeof v !== "number" || v === 0) continue;
+    if (k === "generic") { icons.push(<span key="gen" style={{background:"rgba(100,100,100,.4)",borderRadius:"50%",width:"18px",height:"18px",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:"10px",color:"#aaa",fontWeight:"bold"}}>{v}</span>); }
+    else { for (let i=0;i<v;i++) icons.push(<span key={k+i} style={{fontSize:"14px"}}>{MANA_ICON[k]||k}</span>); }
+  }
+  return icons;
+};
+
 // ═══════════════════════════════════════════════════════════════
 export default function App() {
   const [screen, setScreen] = useState("menu");
@@ -167,11 +240,23 @@ export default function App() {
         .bcard:hover{transform:scale(1.1);z-index:60;}
       `}</style>
 
-      {/* ZOOM PREVIEW */}
+      {/* ZOOM PREVIEW — painel grande com detalhes em português */}
       {hovered?.name && (
-        <div style={{position:"fixed",left:"14px",bottom:"170px",zIndex:600,pointerEvents:"none",animation:"fadeIn .12s ease"}}>
-          <div style={{width:"210px",height:"294px",borderRadius:"12px",overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.95),0 0 40px rgba(0,0,0,.6)",border:"2px solid #c9a84c"}}>
+        <div style={{position:"fixed",left:"14px",bottom:"160px",zIndex:600,pointerEvents:"none",animation:"fadeIn .12s ease",display:"flex",gap:"10px",alignItems:"flex-start"}}>
+          {/* Imagem grande */}
+          <div style={{width:"280px",height:"392px",borderRadius:"14px",overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.98),0 0 60px rgba(0,0,0,.7)",border:"2px solid #c9a84c",flexShrink:0}}>
             <CardImage name={hovered.name} />
+          </div>
+          {/* Painel de info em português */}
+          <div style={{width:"200px",background:"linear-gradient(160deg,#0a0e18,#111820)",border:"1px solid #1e2e40",borderRadius:"12px",padding:"14px",boxShadow:"0 12px 40px rgba(0,0,0,.9)",fontSize:"12px",color:"#c8d8e8",display:"flex",flexDirection:"column",gap:"8px"}}>
+            <div style={{fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"14px",color:"#f0d48a",borderBottom:"1px solid #1e2e40",paddingBottom:"8px",lineHeight:"1.3"}}>{CARD_PT[hovered.name]?.nome || hovered.name}</div>
+            <div style={{fontSize:"10px",color:"#6a8aaa",letterSpacing:".08em"}}>{CARD_PT[hovered.name]?.tipo || tipoPT(hovered)}</div>
+            {hovered.type==="creature" && <div style={{background:"rgba(0,0,0,.5)",border:"1px solid #2a3a4a",borderRadius:"6px",padding:"5px 8px",textAlign:"center",fontFamily:"'Cinzel',serif",fontSize:"18px",color:"#f0d48a",letterSpacing:".1em"}}>{hovered.power}/{hovered.toughness}</div>}
+            {hovered.cost && <div style={{display:"flex",flexWrap:"wrap",gap:"3px",alignItems:"center"}}><span style={{fontSize:"10px",color:"#4a6a8a",marginRight:"3px"}}>Custo:</span>{custoIcones(hovered.cost)}</div>}
+            {(hovered.abilities?.length > 0) && <div style={{display:"flex",flexWrap:"wrap",gap:"4px"}}>{hovered.abilities.map(a=><span key={a} style={{background:"rgba(255,200,80,.08)",border:"1px solid #3a2a08",borderRadius:"4px",padding:"2px 6px",fontSize:"10px",color:"#d4a030"}}>{ABILITY_PT[a]||a}</span>)}</div>}
+            {hovered.effect && <div style={{fontSize:"11px",color:"#90b8d0",lineHeight:"1.5",background:"rgba(0,0,0,.4)",borderRadius:"6px",padding:"6px 8px",borderLeft:"2px solid #2a5070"}}>{EFFECT_PT[hovered.effect] || hovered.effect}</div>}
+            {hovered.type==="land" && hovered.produces && <div style={{fontSize:"11px",color:"#70c090"}}>✨ Produz: {hovered.produces.map(m=>MANA_NOME[m]).join(", ")}</div>}
+            <div style={{fontSize:"10px",color:"#2a4a6a",textTransform:"uppercase",letterSpacing:".1em",marginTop:"2px"}}>{RARITY_PT[hovered.rarity]||""}</div>
           </div>
         </div>
       )}
