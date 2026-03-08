@@ -298,16 +298,37 @@ export default function App() {
           {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"5px",padding:"5px 9px",fontSize:"11px",color:"#70c050",textAlign:"center",animation:"pulse 1s infinite"}}>🎯 Clique no alvo {targetMode==="opp"?"inimigo":"aliado"}<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{marginLeft:"6px",background:"none",border:"none",color:"#ff8888",cursor:"pointer",fontSize:"12px"}}>✕</button></div>}
           <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
             {isMy&&!cp&&<>
-              {step==="untap"&&<button style={btn("#74b9ff","#030c18",true)} onClick={()=>emit("advance_step")}>🔄 Desvirar</button>}
-              {step==="upkeep"&&<button style={btn("#a29bfe","#080318",true)} onClick={()=>emit("advance_step")}>⬆️ Manutenção</button>}
-              {step==="draw"&&<button style={btn("#55efc4","#031208",true)} onClick={()=>emit("draw_card")}>📖 Comprar Carta</button>}
-              {step==="main1"&&<button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>⚔️ Ir para Combate</button>}
-              {step==="main2"&&<button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>🌙 Fim de Turno</button>}
-              {step==="end"&&<button style={btn("#636e72","#0a0b0c",true)} onClick={()=>emit("advance_step")}>→ Próximo Turno</button>}
+              {step==="untap"&&<>
+                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Suas permanentes desviram automaticamente.</div>
+                <button style={btn("#74b9ff","#030c18",true)} onClick={()=>emit("advance_step")}>🔄 Confirmar Desvirar</button>
+              </>}
+              {step==="upkeep"&&<>
+                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Efeitos do início do turno. Clique para continuar.</div>
+                <button style={btn("#a29bfe","#080318",true)} onClick={()=>emit("advance_step")}>⬆️ Confirmar Manutenção</button>
+              </>}
+              {step==="draw"&&<>
+                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Compre uma carta do seu deck.</div>
+                <button style={btn("#55efc4","#031208",true)} onClick={()=>emit("draw_card")}>📖 Comprar Carta</button>
+              </>}
+              {step==="main1"&&<>
+                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Jogue terrenos, invoque criaturas e lance feitiços.</div>
+                <button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>⚔️ Ir para Combate</button>
+                <button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar Turno (sem atacar)</button>
+              </>}
+              {step==="main2"&&<>
+                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Fase pós-combate. Lance mais feitiços se quiser.</div>
+                <button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>🌙 Ir para Fim de Turno</button>
+                <button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar Turno</button>
+              </>}
+              {step==="end"&&<>
+                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Fim do turno. Passa para o oponente.</div>
+                <button style={btn("#636e72","#0a0b0c",true)} onClick={()=>emit("advance_step")}>→ Passar para o Oponente</button>
+              </>}
             </>}
             {isMy&&cp==="declare_attackers"&&<>
-              <div style={{fontSize:"11px",color:"#e17055",textAlign:"center",animation:"pulse 1s infinite",background:"rgba(80,20,0,.5)",border:"1px solid #e17055",borderRadius:"5px",padding:"5px 8px"}}>⚔️ Clique nas criaturas para atacar!</div>
-              <button style={{...btn("#e17055","#150601",true),animation:"atk 1.5s infinite"}} onClick={()=>emit("declare_attackers")}>⚔️ Confirmar Ataque ({atks.length})</button>
+              <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"2px 0"}}>Clique nas suas criaturas para atacar, depois confirme. Ou pule.</div>
+              <div style={{fontSize:"11px",color:"#e17055",textAlign:"center",background:"rgba(80,20,0,.5)",border:"1px solid #e17055",borderRadius:"5px",padding:"4px 8px"}}>{atks.length>0?`⚔️ ${atks.length} criatura(s) pronta(s)`:"🛡️ Nenhuma selecionada"}</div>
+              <button style={{...btn("#e17055","#150601",true),animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️ {atks.length>0?`Atacar com ${atks.length}`:"Pular Ataque"}</button>
             </>}
             {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️ Confirmar Bloqueio</button>}
             {!isMy&&!cp&&<div style={{fontSize:"11px",color:"#2a4a6a",fontStyle:"italic",textAlign:"center",animation:"pulse 2s infinite"}}>⏳ Aguardando oponente...</div>}
@@ -385,16 +406,44 @@ function Mana({pool}) {
   </div>;
 }
 
-// ── Step Tracker ──
-function Steps({step,turn,tn,mi}) {
-  const ss=["untap","upkeep","draw","main1","combat","main2","end"];
-  const ic={untap:"🔄",upkeep:"⬆️",draw:"📖",main1:"1",combat:"⚔️",main2:"2",end:"🌙"};
-  return <div style={{textAlign:"center"}}>
-    <div style={{fontSize:"11px",color:turn===mi?"#f0d48a":"#3a5a7a",letterSpacing:".07em",marginBottom:"4px",fontWeight:"600"}}>T{tn} — {turn===mi?"SEU TURNO":"OPONENTE"}</div>
-    <div style={{display:"flex",gap:"2px",justifyContent:"center"}}>
-      {ss.map(s=><div key={s} title={STEP_LABELS[s]} style={{width:"22px",height:"22px",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",background:s===step?STEP_COLORS[s]:"rgba(0,0,0,.5)",border:`1px solid ${s===step?STEP_COLORS[s]:"#14202e"}`,boxShadow:s===step?`0 0 10px ${STEP_COLORS[s]}`:"none",transition:"all .3s"}}>{ic[s]}</div>)}
+// ── Step Tracker com tooltip ──
+const STEP_DESC = {
+  untap:  "Todas as suas permanentes desviram (ficam na posição normal).",
+  upkeep: "Fase de manutenção. Efeitos que acontecem 'no início do turno' ocorrem aqui.",
+  draw:   "Compre uma carta do topo do seu deck.",
+  main1:  "Jogue terrenos, invoque criaturas e lance feitiços antes do combate.",
+  combat: "Declare quais criaturas vão atacar. O oponente poderá bloquear.",
+  main2:  "Fase principal após o combate. Lance mais feitiços ou invoque criaturas.",
+  end:    "Fim do turno. Descarte se tiver mais de 7 cartas na mão.",
+};
+
+function Steps({step, turn, tn, mi}) {
+  const [tooltip, setTooltip] = useState(null);
+  const ss = ["untap","upkeep","draw","main1","combat","main2","end"];
+  const ic = {untap:"🔄",upkeep:"⬆️",draw:"📖",main1:"1",combat:"⚔️",main2:"2",end:"🌙"};
+  return (
+    <div style={{textAlign:"center"}}>
+      <div style={{fontSize:"11px",color:turn===mi?"#f0d48a":"#3a5a7a",letterSpacing:".07em",marginBottom:"4px",fontWeight:"600"}}>
+        T{tn} — {turn===mi?"SEU TURNO":"OPONENTE"}
+      </div>
+      <div style={{display:"flex",gap:"2px",justifyContent:"center",position:"relative"}}>
+        {ss.map(s=>(
+          <div key={s} onMouseEnter={()=>setTooltip(s)} onMouseLeave={()=>setTooltip(null)}
+            style={{width:"22px",height:"22px",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:"10px",background:s===step?STEP_COLORS[s]:"rgba(0,0,0,.5)",
+              border:`1px solid ${s===step?STEP_COLORS[s]:"#14202e"}`,
+              boxShadow:s===step?`0 0 10px ${STEP_COLORS[s]}`:"none",transition:"all .3s",cursor:"help"}}>
+            {ic[s]}
+          </div>
+        ))}
+      </div>
+      {/* Caixa de descrição da fase atual */}
+      <div style={{marginTop:"6px",background:"rgba(0,0,0,.5)",border:`1px solid ${STEP_COLORS[tooltip||step]||"#1a2a3a"}`,borderRadius:"6px",padding:"5px 7px",fontSize:"10px",color:"#8ab0c8",lineHeight:"1.4",minHeight:"36px",transition:"border-color .2s"}}>
+        <span style={{color:STEP_COLORS[tooltip||step],fontWeight:"600"}}>{STEP_LABELS[tooltip||step]}</span>
+        <br/>{STEP_DESC[tooltip||step]}
+      </div>
     </div>
-  </div>;
+  );
 }
 
 // ── Battlefield Card ──
