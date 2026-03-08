@@ -58,17 +58,31 @@ const btn = (color, bg, big=false) => ({
 
 // ── Card Image ──
 function CardImage({ name, style={} }) {
-  const [url, setUrl] = useState(imageCache[name] || null);
-  const [loading, setLoading] = useState(!imageCache[name]);
+  const [url, setUrl] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    if (!url && name) {
-      setLoading(true);
-      fetchCardImage(name).then(u => {
-        setLoading(false);
-        if (u) setUrl(u);
-      });
+    if (!name) return;
+    // Reseta ao trocar de carta
+    setUrl(null);
+    setLoading(true);
+
+    // Se já está no cache, usa imediatamente
+    if (imageCache[name]) {
+      setUrl(imageCache[name]);
+      setLoading(false);
+      return;
     }
+
+    let cancelled = false;
+    fetchCardImage(name).then(u => {
+      if (cancelled) return;
+      setLoading(false);
+      if (u) setUrl(u);
+    });
+    return () => { cancelled = true; };
   }, [name]);
+
   if (loading) return (
     <div style={{width:"100%",height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"4px",...style}}>
       <div style={{fontSize:"16px",animation:"pulse 1s infinite"}}>🃏</div>
@@ -173,6 +187,18 @@ export default function App() {
   const [targetMode, setTargetMode] = useState(null);
   const [hovered, setHovered] = useState(null);
   const logRef = useRef(null);
+  const hoverTimer = useRef(null);
+
+  const setHoveredDelayed = useCallback((card) => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    if (card) {
+      // Ao entrar numa carta, mostra imediatamente
+      setHovered(card);
+    } else {
+      // Ao sair, espera 80ms antes de limpar (evita piscar entre cartas)
+      hoverTimer.current = setTimeout(() => setHovered(null), 80);
+    }
+  }, []);
 
   useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [gs?.log]);
 
@@ -337,9 +363,9 @@ export default function App() {
           {opp.hand.map((_,i)=><div key={i} style={{width:"44px",height:"62px",borderRadius:"7px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
         </div>
         <div style={{display:"flex",gap:"6px",flexWrap:"wrap",minHeight:"90px",alignItems:"center"}}>
-          {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{}} onHov={setHovered}/>)}
+          {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{}} onHov={setHoveredDelayed}/>)}
           {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"80px",background:"#0e1d2e",flexShrink:0}}/>}
-          {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"} onClick={()=>clickCreature(c,true)} onHov={setHovered}/>)}
+          {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"} onClick={()=>clickCreature(c,true)} onHov={setHoveredDelayed}/>)}
         </div>
       </div>
 
@@ -347,7 +373,7 @@ export default function App() {
       <div style={{flex:1,display:"flex",gap:"10px",padding:"8px 16px",background:"radial-gradient(ellipse at center,#08130a,#030604)",borderTop:"1px solid #0c1a0e",borderBottom:"1px solid #0c1a0e",minHeight:"130px",alignItems:"stretch"}}>
         {/* My creatures */}
         <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:"8px",alignItems:"center",justifyContent:"center"}}>
-          {me.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="my"} onClick={()=>clickCreature(c,false)} onHov={setHovered}/>)}
+          {me.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="my"} onClick={()=>clickCreature(c,false)} onHov={setHoveredDelayed}/>)}
         </div>
         {/* Panel */}
         <div style={{width:"245px",flexShrink:0,display:"flex",flexDirection:"column",gap:"7px",justifyContent:"center"}}>
@@ -404,16 +430,16 @@ export default function App() {
         <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
           <PBar player={me} active={isMy} compact/>
           <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginLeft:"10px"}}>
-            {me.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{if(isMy)emit("tap_land",{cardUid:c.uid});}} onHov={setHovered}/>)}
+            {me.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{if(isMy)emit("tap_land",{cardUid:c.uid});}} onHov={setHoveredDelayed}/>)}
           </div>
           <div style={{marginLeft:"auto",fontSize:"10px",color:"#2a3a4a"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0} {me.hand?.length>7&&<span style={{color:"#ff8888",fontWeight:"bold"}}>✋{me.hand.length}/7!</span>}</div>
         </div>
       </div>
 
       {/* ── HAND ── */}
-      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"10px 16px",minHeight:"165px",flexShrink:0}} onMouseLeave={()=>setHovered(null)}>
+      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"10px 16px",minHeight:"165px",flexShrink:0}} onMouseLeave={()=>setHoveredDelayed(null)}>
         <div style={{display:"flex",gap:"8px",overflowX:"auto",paddingBottom:"8px",alignItems:"flex-end"}}>
-          {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHovered}/>)}
+          {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed}/>)}
           {me.hand.length===0&&<div style={{color:"#151008",fontSize:"13px",margin:"auto",fontStyle:"italic"}}>Sem cartas na mão</div>}
         </div>
       </div>
