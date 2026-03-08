@@ -165,8 +165,8 @@ export default function App() {
   const [myIndex, setMyIndex] = useState(null);
   const [roomCode, setRoomCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
-  const [playerName, setPlayerName] = useState("");
-  const [selColors, setSelColors] = useState(["R","G"]);
+  const [playerName, setPlayerName] = useState(() => sessionStorage.getItem("mtg_name") || "");
+  const [selColors, setSelColors] = useState(() => { try { return JSON.parse(sessionStorage.getItem("mtg_colors")) || ["R","G"]; } catch { return ["R","G"]; }});
   const [error, setError] = useState("");
   const [waitMsg, setWaitMsg] = useState("");
   const [selCard, setSelCard] = useState(null);
@@ -184,9 +184,44 @@ export default function App() {
     s.on("waiting", ({msg}) => setWaitMsg(msg));
     s.on("game_state", (state) => { setMyIndex(state.myIndex); setGs(state); setScreen("game"); });
     s.on("error", ({msg}) => { if (msg !== "Sala cheia!") showError(msg); });
+    s.on("rejoin_failed", () => {
+      // Sala não existe mais, limpa sessão e volta pro menu
+      sessionStorage.removeItem("mtg_room");
+      sessionStorage.removeItem("mtg_name");
+      sessionStorage.removeItem("mtg_colors");
+      setScreen("menu");
+      showError("Sessão expirada. Por favor, crie ou entre em uma nova sala.");
+    });
     setSocket(s);
     return s;
   }, []);
+
+  // ── Reconexão automática ao recarregar ──
+  useEffect(() => {
+    const savedRoom = sessionStorage.getItem("mtg_room");
+    const savedName = sessionStorage.getItem("mtg_name");
+    const savedColors = (() => { try { return JSON.parse(sessionStorage.getItem("mtg_colors")); } catch { return null; }})();
+    if (savedRoom && savedName) {
+      setWaitMsg("Reconectando...");
+      setScreen("lobby");
+      const s = connect();
+      s.emit("rejoin_room", { code: savedRoom, name: savedName, colors: savedColors || ["R","G"] });
+    }
+  }, []);
+
+  // ── Salva sessão sempre que entrar num jogo ──
+  useEffect(() => {
+    if (screen === "game" && myIndex !== null && gs) {
+      const code = gs.players ? sessionStorage.getItem("mtg_room") : null;
+      if (code) return; // já salvo
+    }
+  }, [screen, myIndex]);
+
+  const saveSession = (code, name, colors) => {
+    sessionStorage.setItem("mtg_room", code);
+    sessionStorage.setItem("mtg_name", name);
+    sessionStorage.setItem("mtg_colors", JSON.stringify(colors));
+  };
 
   const emit = useCallback((ev, data) => { if (socket) socket.emit(ev, data); }, [socket]);
 
@@ -252,8 +287,8 @@ export default function App() {
   };
 
   if (screen==="menu") return <Menu name={playerName} setName={setPlayerName} colors={selColors} setColors={setSelColors} code={joinCode} setCode={setJoinCode} error={error}
-    onCreate={()=>{ if(!playerName.trim()){showError("Digite seu nome!");return;} const s=connect(); s.emit("create_room",{name:playerName,colors:selColors}); s.emit("set_player_info",{name:playerName,colors:selColors}); }}
-    onJoin={()=>{ if(!playerName.trim()||!joinCode.trim()){showError("Preencha nome e código!");return;} const s=connect(); s.emit("join_room",{code:joinCode.trim().toUpperCase(),name:playerName,colors:selColors}); }}
+    onCreate={()=>{ if(!playerName.trim()){showError("Digite seu nome!");return;} const s=connect(); s.on("room_created",({code})=>{ saveSession(code,playerName,selColors); }); s.emit("create_room",{name:playerName,colors:selColors}); s.emit("set_player_info",{name:playerName,colors:selColors}); }}
+    onJoin={()=>{ if(!playerName.trim()||!joinCode.trim()){showError("Preencha nome e código!");return;} const s=connect(); saveSession(joinCode.trim().toUpperCase(),playerName,selColors); s.emit("join_room",{code:joinCode.trim().toUpperCase(),name:playerName,colors:selColors}); }}
   />;
   if (screen==="lobby") return <Lobby code={roomCode} msg={waitMsg} />;
   if (!gs||!me||!opp) return <div style={{color:"#fff",display:"flex",height:"100vh",alignItems:"center",justifyContent:"center",fontFamily:"serif",fontSize:"18px"}}>🔮 Conectando...</div>;
@@ -397,7 +432,7 @@ export default function App() {
                 <div style={{fontSize:"22px",color:p.life>0?"#4ade80":"#f87171",fontWeight:"bold"}}>❤️ {p.life}</div>
               </div>)}
             </div>
-            <button onClick={()=>window.location.reload()} style={{background:"linear-gradient(135deg,#160a02,#3a2005)",border:"2px solid #c9a84c",color:"#f0d48a",padding:"12px 36px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"15px",letterSpacing:".1em"}}>🔄 Jogar Novamente</button>
+            <button onClick={()=>{ sessionStorage.removeItem("mtg_room"); window.location.reload(); }} style={{background:"linear-gradient(135deg,#160a02,#3a2005)",border:"2px solid #c9a84c",color:"#f0d48a",padding:"12px 36px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"15px",letterSpacing:".1em"}}>🔄 Jogar Novamente</button>
           </div>
         </div>
       )}
