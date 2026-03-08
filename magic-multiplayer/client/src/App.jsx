@@ -1,12 +1,21 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { io } from "socket.io-client";
 
-// ── CHANGE THIS TO YOUR DEPLOYED SERVER URL ──────────────────
 const SERVER_URL = process.env.REACT_APP_SERVER_URL || "http://localhost:3001";
 
-// ═══════════════════════════════════════════════════════════════
-// CONSTANTS
-// ═══════════════════════════════════════════════════════════════
+const imageCache = {};
+const fetchCardImage = async (name) => {
+  if (imageCache[name] !== undefined) return imageCache[name];
+  imageCache[name] = null; // prevent duplicate requests
+  try {
+    const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+    const data = await res.json();
+    const url = data?.image_uris?.normal || data?.card_faces?.[0]?.image_uris?.normal || null;
+    imageCache[name] = url;
+    return url;
+  } catch { return null; }
+};
+
 const COLOR_STYLES = {
   W: { bg:"linear-gradient(135deg,#f8f3e3,#e8d5a3)", border:"#c9a84c", text:"#5a4a1a" },
   U: { bg:"linear-gradient(135deg,#1a3a6e,#2d5fa8)", border:"#4a90d9", text:"#c8e0ff" },
@@ -30,302 +39,217 @@ const calcCMC = (cost) => {
   return Object.values(cost).reduce((s, v) => s + (typeof v === "number" ? v : 0), 0);
 };
 
-const STEPS = ["untap","upkeep","draw","main1","combat","main2","end"];
-const STEP_LABELS = { untap:"🔄 Desvirar", upkeep:"⬆️ Manutenção", draw:"📖 Comprar", main1:"1️⃣ Principal 1", combat:"⚔️ Combate", main2:"2️⃣ Principal 2", end:"🌙 Fim" };
 const STEP_COLORS = { untap:"#74b9ff", upkeep:"#a29bfe", draw:"#55efc4", main1:"#fdcb6e", combat:"#e17055", main2:"#fdcb6e", end:"#636e72" };
+const STEP_LABELS = { untap:"🔄 Desvirar", upkeep:"⬆️ Manutenção", draw:"📖 Comprar", main1:"1️⃣ Principal 1", combat:"⚔️ Combate", main2:"2️⃣ Principal 2", end:"🌙 Fim" };
+
+const logColor = (type) => ({ error:"#ff8888", combat:"#ffd166", system:"#06d6a0", mana:"#74b9ff", destroy:"#fd79a8", draw:"#a29bfe", buff:"#55efc4", spell:"#fdcb6e", play:"#b8f0c8" }[type] || "#8a8a9a");
+
+const btn = (color, bg, big=false) => ({
+  background: bg, border:`1.5px solid ${color}`, color, padding: big?"10px 18px":"7px 14px",
+  borderRadius:"5px", cursor:"pointer", fontFamily:"'Cinzel',serif", fontSize: big?"13px":"12px",
+  letterSpacing:".05em", transition:"all .2s", whiteSpace:"nowrap",
+});
+
+// ── Card Image ──
+function CardImage({ name, style={} }) {
+  const [url, setUrl] = useState(imageCache[name] || null);
+  useEffect(() => {
+    if (!url && name) fetchCardImage(name).then(u => { if (u) setUrl(u); });
+  }, [name]);
+  if (!url) return <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"28px",...style}}>🃏</div>;
+  return <img src={url} alt={name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",...style}} />;
+}
 
 // ═══════════════════════════════════════════════════════════════
-// MAIN APP
-// ═══════════════════════════════════════════════════════════════
 export default function App() {
-  const [screen, setScreen] = useState("menu"); // menu | lobby | game
+  const [screen, setScreen] = useState("menu");
   const [socket, setSocket] = useState(null);
-  const [gameState, setGameState] = useState(null);
+  const [gs, setGs] = useState(null);
   const [myIndex, setMyIndex] = useState(null);
   const [roomCode, setRoomCode] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [playerName, setPlayerName] = useState("");
-  const [selectedColors, setSelectedColors] = useState(["R","G"]);
+  const [selColors, setSelColors] = useState(["R","G"]);
   const [error, setError] = useState("");
-  const [waitingMsg, setWaitingMsg] = useState("");
-  const [selectedCard, setSelectedCard] = useState(null); // uid of card in hand
-  const [targetMode, setTargetMode] = useState(null); // "opp_creature" | "my_creature" | null
+  const [waitMsg, setWaitMsg] = useState("");
+  const [selCard, setSelCard] = useState(null);
+  const [targetMode, setTargetMode] = useState(null);
+  const [hovered, setHovered] = useState(null);
   const logRef = useRef(null);
 
-  useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
-  }, [gameState?.log]);
+  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [gs?.log]);
 
-  // ── CONNECT ──
+  const showError = (msg) => { setError(msg); setTimeout(()=>setError(""), 3000); };
+
   const connect = useCallback(() => {
-    const s = io(SERVER_URL, { transports: ["websocket","polling"] });
-    s.on("room_created", ({ code }) => {
-      setRoomCode(code);
-      setWaitingMsg(`Sala criada! Código: ${code} — Aguardando oponente...`);
-      setScreen("lobby");
-    });
-    s.on("waiting", ({ msg }) => setWaitingMsg(msg));
-    s.on("game_state", (state) => {
-      setMyIndex(state.myIndex);
-      setGameState(state);
-      if (screen !== "game") setScreen("game");
-    });
-    s.on("error", ({ msg }) => setError(msg));
+    const s = io(SERVER_URL, { transports:["websocket","polling"] });
+    s.on("room_created", ({code}) => { setRoomCode(code); setWaitMsg(`Código: ${code}`); setScreen("lobby"); });
+    s.on("waiting", ({msg}) => setWaitMsg(msg));
+    s.on("game_state", (state) => { setMyIndex(state.myIndex); setGs(state); setScreen("game"); });
+    s.on("error", ({msg}) => { if (msg !== "Sala cheia!") showError(msg); });
     setSocket(s);
     return s;
-  }, [screen]);
+  }, []);
 
-  const createRoom = () => {
-    if (!playerName.trim()) { setError("Digite seu nome!"); return; }
-    const s = connect();
-    s.emit("create_room", { name: playerName, colors: selectedColors });
-    s.emit("set_player_info", { name: playerName, colors: selectedColors });
-  };
+  const emit = useCallback((ev, data) => { if (socket) socket.emit(ev, data); }, [socket]);
 
-  const joinRoom = () => {
-    if (!playerName.trim()) { setError("Digite seu nome!"); return; }
-    if (!joinCode.trim()) { setError("Digite o código da sala!"); return; }
-    const s = connect();
-    s.emit("join_room", { code: joinCode.trim().toUpperCase(), name: playerName, colors: selectedColors });
-  };
-
-  // ── GAME ACTIONS ──
-  const emit = useCallback((event, data) => {
-    if (socket) socket.emit(event, data);
-  }, [socket]);
-
-  const gs = gameState;
   const me = gs ? gs.players[myIndex] : null;
-  const opp = gs ? gs.players[1 - myIndex] : null;
-  const isMyTurn = gs && gs.turn === myIndex;
+  const opp = gs ? gs.players[1-myIndex] : null;
+  const isMy = gs && gs.turn === myIndex;
+  const isDef = gs && gs.turn !== myIndex;
   const step = gs?.step;
-  const combatPhase = gs?.combatPhase;
-  const attackers = gs?.attackers || [];
-  const blockers = gs?.blockers || {};
-  const isDefender = gs && gs.turn !== myIndex;
+  const cp = gs?.combatPhase;
+  const atks = gs?.attackers || [];
+  const blks = gs?.blockers || {};
 
-  const canAffordCard = (card) => {
-    if (!me || card.type === "land") return true;
-    const pool = { ...me.manaPool };
-    const cost = card.cost || {};
-    for (const [k, v] of Object.entries(cost)) {
-      if (k === "generic" || typeof v !== "number") continue;
-      if ((pool[k] || 0) < v) return false;
-      pool[k] -= v;
+  const affordable = (card) => {
+    if (!me || card.type==="land") return true;
+    const pool = {...me.manaPool};
+    for (const [k,v] of Object.entries(card.cost||{})) {
+      if (k==="generic"||typeof v!=="number") continue;
+      if ((pool[k]||0)<v) return false;
+      pool[k]-=v;
     }
-    const generic = typeof cost.generic === "number" ? cost.generic : 0;
-    return Object.values(pool).reduce((a, b) => a + b, 0) >= generic;
+    const gen = typeof (card.cost||{}).generic==="number"?(card.cost||{}).generic:0;
+    return Object.values(pool).reduce((a,b)=>a+b,0)>=gen;
   };
 
-  const handleHandCardClick = (card) => {
-    if (!isMyTurn) return;
-    if (card.type === "land") {
-      if (!["main1","main2"].includes(step)) return;
-      emit("play_land", { cardUid: card.uid });
-      return;
-    }
+  const clickHand = (card) => {
+    if (!isMy) return;
+    if (card.type==="land") { if (["main1","main2"].includes(step)) emit("play_land",{cardUid:card.uid}); return; }
     if (!["main1","main2","combat"].includes(step)) return;
-    if (!canAffordCard(card)) { setError("Mana insuficiente!"); setTimeout(()=>setError(""),2000); return; }
-
-    const needsTarget = card.effect && ["destroy_creature","exile_creature","deal_3_damage","deal_4_damage","pump_creature"].includes(card.effect);
-    if (needsTarget) {
-      setSelectedCard(card.uid);
-      setTargetMode(card.effect === "pump_creature" ? "my_creature" : "opp_creature");
-    } else {
-      emit("cast_card", { cardUid: card.uid });
-    }
+    if (!affordable(card)) { showError("Mana insuficiente!"); return; }
+    const needs = card.effect && ["destroy_creature","exile_creature","deal_3_damage","deal_4_damage","pump_creature"].includes(card.effect);
+    if (needs) { setSelCard(card.uid); setTargetMode(card.effect==="pump_creature"?"my":"opp"); }
+    else emit("cast_card",{cardUid:card.uid});
   };
 
-  const handleCreatureClick = (card, isOpponent) => {
-    if (selectedCard && targetMode) {
-      if ((targetMode === "opp_creature" && isOpponent) || (targetMode === "my_creature" && !isOpponent)) {
-        emit("cast_card", { cardUid: selectedCard, targetUid: card.uid });
-        setSelectedCard(null); setTargetMode(null);
+  const clickCreature = (card, isOpp) => {
+    if (selCard && targetMode) {
+      if ((targetMode==="opp"&&isOpp)||(targetMode==="my"&&!isOpp)) {
+        emit("cast_card",{cardUid:selCard,targetUid:card.uid});
+        setSelCard(null); setTargetMode(null);
       }
       return;
     }
-    if (isMyTurn && combatPhase === "declare_attackers" && !isOpponent) {
-      emit("toggle_attacker", { cardUid: card.uid });
-    }
-    if (isDefender && combatPhase === "declare_blockers" && !isOpponent && attackers.length > 0) {
-      // pick which attacker to block — show selection
-      const firstUnblocked = attackers.find(a => !blockers[a]);
-      if (firstUnblocked) emit("toggle_blocker", { blockerUid: card.uid, attackerUid: firstUnblocked });
+    if (isMy && cp==="declare_attackers" && !isOpp) emit("toggle_attacker",{cardUid:card.uid});
+    if (isDef && cp==="declare_blockers" && !isOpp && atks.length>0) {
+      const first = atks.find(a=>!blks[a]);
+      if (first) emit("toggle_blocker",{blockerUid:card.uid,attackerUid:first});
     }
   };
 
-  // ─── RENDER SCREENS ───────────────────────────────────────
-  if (screen === "menu") return (
-    <MenuScreen
-      playerName={playerName} setPlayerName={setPlayerName}
-      selectedColors={selectedColors} setSelectedColors={setSelectedColors}
-      joinCode={joinCode} setJoinCode={setJoinCode}
-      error={error} onCreate={createRoom} onJoin={joinRoom}
-    />
-  );
-
-  if (screen === "lobby") return (
-    <LobbyScreen code={roomCode} msg={waitingMsg} />
-  );
-
-  if (!gs || !me || !opp) return <div style={{color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"serif",fontSize:"20px"}}>🔮 Conectando...</div>;
+  if (screen==="menu") return <Menu name={playerName} setName={setPlayerName} colors={selColors} setColors={setSelColors} code={joinCode} setCode={setJoinCode} error={error}
+    onCreate={()=>{ if(!playerName.trim()){showError("Digite seu nome!");return;} const s=connect(); s.emit("create_room",{name:playerName,colors:selColors}); s.emit("set_player_info",{name:playerName,colors:selColors}); }}
+    onJoin={()=>{ if(!playerName.trim()||!joinCode.trim()){showError("Preencha nome e código!");return;} const s=connect(); s.emit("join_room",{code:joinCode.trim().toUpperCase(),name:playerName,colors:selColors}); }}
+  />;
+  if (screen==="lobby") return <Lobby code={roomCode} msg={waitMsg} />;
+  if (!gs||!me||!opp) return <div style={{color:"#fff",display:"flex",height:"100vh",alignItems:"center",justifyContent:"center",fontFamily:"serif",fontSize:"18px"}}>🔮 Conectando...</div>;
 
   return (
-    <div style={{ fontFamily:"'Cinzel','Georgia',serif", background:"#070a0d", minHeight:"100vh", color:"#e8d5a3", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+    <div style={{fontFamily:"'Cinzel',serif",background:"#060809",minHeight:"100vh",color:"#e8d5a3",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Crimson+Text:ital,wght@0,400;1,400&display=swap');
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:#111;} ::-webkit-scrollbar-thumb{background:#3a2a15;}
-        .chover { transition: transform .18s, box-shadow .18s; }
-        .chover:hover { transform: translateY(-10px) scale(1.04); z-index: 100; }
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-        @keyframes glow{0%,100%{box-shadow:0 0 8px #e1705580}50%{box-shadow:0 0 24px #e17055,0 0 4px #fff3}}
-        @keyframes attackGlow{0%,100%{box-shadow:0 0 8px #e1705580}50%{box-shadow:0 0 28px #ff6b35,0 0 8px #fff}}
-        @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-        .fade-in { animation: fadeIn .3s ease; }
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital@1&display=swap');
+        *{box-sizing:border-box;}
+        ::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:#080a0c;} ::-webkit-scrollbar-thumb{background:#2a1e0a;border-radius:2px;}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+        @keyframes atk{0%,100%{box-shadow:0 0 14px #e1705580}50%{box-shadow:0 0 32px #e17055,0 0 8px #ff7040}}
+        @keyframes tgt{0%,100%{box-shadow:0 0 10px #55efc460}50%{box-shadow:0 0 26px #55efc4}}
+        @keyframes fadeIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+        .hcard{transition:transform .18s,box-shadow .18s,border-color .18s;}
+        .hcard:hover{transform:translateY(-18px) scale(1.07)!important;z-index:200!important;}
+        .bcard{transition:transform .15s,box-shadow .15s;}
+        .bcard:hover{transform:scale(1.1);z-index:60;}
       `}</style>
 
-      {/* ── OPPONENT ── */}
-      <div style={{ background:"linear-gradient(180deg,#0a1428,#0f1e35)", borderBottom:"1px solid #1a2d45", padding:"6px 14px", flexShrink:0 }}>
-        <PlayerBar player={opp} isActive={!isMyTurn} />
-        <div style={{ display:"flex", gap:"5px", flexWrap:"wrap", minHeight:"55px", alignItems:"center", padding:"4px 0" }}>
-          {/* Opponent lands */}
-          {opp.battlefield.filter(c=>c.type==="land").map(c => (
-            <BFCard key={c.uid} card={c} isAttacker={false} isBlocker={false}
-              onClick={()=>{}} />
-          ))}
-          {opp.battlefield.filter(c=>c.type==="land").length > 0 && <div style={{width:"1px",height:"50px",background:"#1e2d40"}}/>}
-          {/* Opponent creatures */}
-          {opp.battlefield.filter(c=>c.type!=="land").map(c => (
-            <BFCard key={c.uid} card={c}
-              isAttacker={attackers.includes(c.uid)}
-              isBlocker={Object.values(blockers).includes(c.uid)}
-              isTargetable={targetMode === "opp_creature"}
-              onClick={()=>handleCreatureClick(c, true)}
-            />
-          ))}
-          {/* Hidden hand */}
-          <div style={{marginLeft:"auto",display:"flex",gap:"3px"}}>
-            {opp.hand.map((_,i) => (
-              <div key={i} style={{width:"38px",height:"52px",borderRadius:"5px",background:"linear-gradient(135deg,#1a2a4a,#0d1520)",border:"1px solid #1e3a5a"}} />
-            ))}
+      {/* ZOOM PREVIEW */}
+      {hovered?.name && (
+        <div style={{position:"fixed",left:"14px",bottom:"170px",zIndex:600,pointerEvents:"none",animation:"fadeIn .12s ease"}}>
+          <div style={{width:"210px",height:"294px",borderRadius:"12px",overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.95),0 0 40px rgba(0,0,0,.6)",border:"2px solid #c9a84c"}}>
+            <CardImage name={hovered.name} />
           </div>
+        </div>
+      )}
+
+      {/* ── OPPONENT ── */}
+      <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"8px 16px",flexShrink:0}}>
+        <PBar player={opp} active={!isMy} />
+        <div style={{display:"flex",gap:"4px",marginBottom:"5px",justifyContent:"flex-end"}}>
+          {opp.hand.map((_,i)=><div key={i} style={{width:"44px",height:"62px",borderRadius:"7px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
+        </div>
+        <div style={{display:"flex",gap:"6px",flexWrap:"wrap",minHeight:"90px",alignItems:"center"}}>
+          {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{}} onHov={setHovered}/>)}
+          {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"80px",background:"#0e1d2e",flexShrink:0}}/>}
+          {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"} onClick={()=>clickCreature(c,true)} onHov={setHovered}/>)}
         </div>
       </div>
 
       {/* ── CENTER ── */}
-      <div style={{ flex:1, display:"flex", gap:"10px", padding:"6px 14px", background:"radial-gradient(ellipse at center,#0a1a0a,#050805)", borderTop:"1px solid #152015", borderBottom:"1px solid #152015", minHeight:"100px", alignItems:"stretch" }}>
-        {/* My creatures on battlefield */}
-        <div style={{ flex:1, display:"flex", flexWrap:"wrap", gap:"5px", alignItems:"center", justifyContent:"center" }}>
-          {me.battlefield.filter(c=>c.type!=="land").map(c => (
-            <BFCard key={c.uid} card={c}
-              isAttacker={attackers.includes(c.uid)}
-              isBlocker={Object.values(blockers).includes(c.uid)}
-              isTargetable={targetMode === "my_creature"}
-              onClick={()=>handleCreatureClick(c, false)}
-            />
-          ))}
+      <div style={{flex:1,display:"flex",gap:"10px",padding:"8px 16px",background:"radial-gradient(ellipse at center,#08130a,#030604)",borderTop:"1px solid #0c1a0e",borderBottom:"1px solid #0c1a0e",minHeight:"130px",alignItems:"stretch"}}>
+        {/* My creatures */}
+        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:"8px",alignItems:"center",justifyContent:"center"}}>
+          {me.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="my"} onClick={()=>clickCreature(c,false)} onHov={setHovered}/>)}
         </div>
-
-        {/* Center info panel */}
-        <div style={{ width:"200px", flexShrink:0, display:"flex", flexDirection:"column", gap:"6px", justifyContent:"center" }}>
-          <StepTracker step={step} turn={gs.turn} turnNumber={gs.turnNumber} myIndex={myIndex} />
-          <ManaPool pool={me.manaPool} />
-          {error && <div style={{background:"#3d0a0a",border:"1px solid #c94c4c",borderRadius:"4px",padding:"4px 8px",fontSize:"11px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
-          {selectedCard && targetMode && (
-            <div style={{background:"#1a2d0a",border:"1px solid #5a8c2a",borderRadius:"4px",padding:"4px 8px",fontSize:"11px",color:"#a0d060",textAlign:"center",animation:"pulse 1s infinite"}}>
-              🎯 Clique no alvo {targetMode==="opp_creature"?"inimigo":"aliado"}
-              <button onClick={()=>{setSelectedCard(null);setTargetMode(null);}} style={{marginLeft:"6px",background:"none",border:"none",color:"#ff8888",cursor:"pointer",fontSize:"11px"}}>✕</button>
-            </div>
-          )}
-          {/* Combat buttons */}
-          {isMyTurn && combatPhase === "declare_attackers" && (
-            <button onClick={()=>emit("declare_attackers")} style={btnStyle("#e17055","#3d1505","#c05040",true)}>
-              ⚔️ Confirmar Ataque ({attackers.length})
-            </button>
-          )}
-          {isDefender && combatPhase === "declare_blockers" && (
-            <button onClick={()=>emit("declare_blockers")} style={btnStyle("#74b9ff","#051530","#3a7fbf",true)}>
-              🛡️ Confirmar Bloqueio
-            </button>
-          )}
+        {/* Panel */}
+        <div style={{width:"215px",flexShrink:0,display:"flex",flexDirection:"column",gap:"7px",justifyContent:"center"}}>
+          <Steps step={step} turn={gs.turn} tn={gs.turnNumber} mi={myIndex}/>
+          <Mana pool={me.manaPool}/>
+          {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"5px",padding:"5px 9px",fontSize:"11px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
+          {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"5px",padding:"5px 9px",fontSize:"11px",color:"#70c050",textAlign:"center",animation:"pulse 1s infinite"}}>🎯 Clique no alvo {targetMode==="opp"?"inimigo":"aliado"}<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{marginLeft:"6px",background:"none",border:"none",color:"#ff8888",cursor:"pointer",fontSize:"12px"}}>✕</button></div>}
+          <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
+            {isMy&&!cp&&<>
+              {step==="untap"&&<button style={btn("#74b9ff","#030c18",true)} onClick={()=>emit("advance_step")}>🔄 Desvirar</button>}
+              {step==="upkeep"&&<button style={btn("#a29bfe","#080318",true)} onClick={()=>emit("advance_step")}>⬆️ Manutenção</button>}
+              {step==="draw"&&<button style={btn("#55efc4","#031208",true)} onClick={()=>emit("draw_card")}>📖 Comprar Carta</button>}
+              {step==="main1"&&<button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>⚔️ Ir para Combate</button>}
+              {step==="main2"&&<button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>🌙 Fim de Turno</button>}
+              {step==="end"&&<button style={btn("#636e72","#0a0b0c",true)} onClick={()=>emit("advance_step")}>→ Próximo Turno</button>}
+            </>}
+            {isMy&&cp==="declare_attackers"&&<button style={{...btn("#e17055","#150601",true),animation:"atk 1.5s infinite"}} onClick={()=>emit("declare_attackers")}>⚔️ Confirmar Ataque ({atks.length})</button>}
+            {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️ Confirmar Bloqueio</button>}
+            {!isMy&&!cp&&<div style={{fontSize:"11px",color:"#2a4a6a",fontStyle:"italic",textAlign:"center",animation:"pulse 2s infinite"}}>⏳ Aguardando oponente...</div>}
+          </div>
         </div>
-
         {/* Log */}
-        <div ref={logRef} style={{ width:"190px", flexShrink:0, overflowY:"auto", background:"rgba(0,0,0,.7)", border:"1px solid #1a2d40", borderRadius:"4px", padding:"6px", fontSize:"10px", lineHeight:"1.6" }}>
-          {(gs.log||[]).map((l,i) => (
-            <div key={l.id||i} style={{ color: logColor(l.type), marginBottom:"1px" }}>{l.msg}</div>
-          ))}
+        <div ref={logRef} style={{width:"196px",flexShrink:0,overflowY:"auto",background:"rgba(0,0,0,.8)",border:"1px solid #121a22",borderRadius:"6px",padding:"8px",fontSize:"10px",lineHeight:"1.75"}}>
+          {(gs.log||[]).map((l,i)=><div key={l.id||i} style={{color:logColor(l.type),marginBottom:"1px"}}>{l.msg}</div>)}
         </div>
       </div>
 
-      {/* ── MY LANDS + CONTROLS ── */}
-      <div style={{ background:"linear-gradient(0deg,#0a1428,#0f1e35)", borderTop:"1px solid #1a2d45", padding:"5px 14px", flexShrink:0 }}>
-        <div style={{ display:"flex", gap:"5px", alignItems:"center", flexWrap:"wrap" }}>
-          <PlayerBar player={me} isActive={isMyTurn} compact />
-          <div style={{ display:"flex", gap:"4px", flexWrap:"wrap", marginLeft:"8px" }}>
-            {me.battlefield.filter(c=>c.type==="land").map(c => (
-              <BFCard key={c.uid} card={c} isAttacker={false} isBlocker={false}
-                onClick={()=>{ if(isMyTurn) emit("tap_land",{cardUid:c.uid}); }}
-              />
-            ))}
+      {/* ── MY LANDS ── */}
+      <div style={{background:"linear-gradient(0deg,#070e1c,#0b1626)",borderTop:"2px solid #0c1b2e",padding:"6px 16px",flexShrink:0}}>
+        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+          <PBar player={me} active={isMy} compact/>
+          <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginLeft:"10px"}}>
+            {me.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{if(isMy)emit("tap_land",{cardUid:c.uid});}} onHov={setHovered}/>)}
           </div>
-          <div style={{ marginLeft:"auto", display:"flex", gap:"6px", alignItems:"center" }}>
-            {isMyTurn && !combatPhase && (
-              <>
-                {step==="untap" && <button style={btnStyle("#74b9ff","#051a30","#3a6a9f")} onClick={()=>emit("advance_step")}>🔄 Desvirar</button>}
-                {step==="upkeep" && <button style={btnStyle("#a29bfe","#1a0530","#7a6abf")} onClick={()=>emit("advance_step")}>⬆️ Manutenção</button>}
-                {step==="draw" && <button style={btnStyle("#55efc4","#052a1a","#2a9f7a")} onClick={()=>emit("draw_card")}>📖 Comprar Carta</button>}
-                {step==="main1" && <button style={btnStyle("#fdcb6e","#2a1a05","#bf9a3a")} onClick={()=>emit("advance_step")}>→ Combate</button>}
-                {step==="main2" && <button style={btnStyle("#fdcb6e","#2a1a05","#bf9a3a")} onClick={()=>emit("advance_step")}>🌙 Fim de Turno</button>}
-                {step==="end" && <button style={btnStyle("#636e72","#101518","#4a5558")} onClick={()=>emit("advance_step")}>→ Próximo</button>}
-              </>
-            )}
-            {!isMyTurn && !combatPhase && (
-              <div style={{fontSize:"12px",color:"#4a6a8a",fontStyle:"italic",animation:"pulse 2s infinite"}}>⏳ Turno do oponente...</div>
-            )}
-          </div>
+          <div style={{marginLeft:"auto",fontSize:"10px",color:"#2a3a4a"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0}</div>
         </div>
       </div>
 
-      {/* ── MY HAND ── */}
-      <div style={{ background:"#030507", borderTop:"1px solid #0d1520", padding:"8px 14px", minHeight:"130px", flexShrink:0 }}>
-        <div style={{ display:"flex", gap:"6px", overflowX:"auto", paddingBottom:"4px", alignItems:"flex-end" }}>
-          {me.hand.map(card => (
-            <HandCard key={card.uid} card={card}
-              isSelected={selectedCard === card.uid}
-              canAfford={canAffordCard(card)}
-              isMyTurn={isMyTurn}
-              step={step}
-              onClick={()=>handleHandCardClick(card)}
-            />
-          ))}
-          {me.hand.length === 0 && <div style={{color:"#2a1a0a",fontSize:"12px",margin:"auto",fontStyle:"italic"}}>Sem cartas na mão</div>}
+      {/* ── HAND ── */}
+      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"10px 16px",minHeight:"165px",flexShrink:0}} onMouseLeave={()=>setHovered(null)}>
+        <div style={{display:"flex",gap:"8px",overflowX:"auto",paddingBottom:"8px",alignItems:"flex-end"}}>
+          {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHovered}/>)}
+          {me.hand.length===0&&<div style={{color:"#151008",fontSize:"13px",margin:"auto",fontStyle:"italic"}}>Sem cartas na mão</div>}
         </div>
       </div>
 
-      {/* ── WINNER OVERLAY ── */}
-      {gs.winner !== null && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
-          <div className="fade-in" style={{ textAlign:"center", padding:"40px", background:"linear-gradient(135deg,#0d1520,#1a2d40)", border:"2px solid #c9a84c", borderRadius:"12px", maxWidth:"400px" }}>
-            <div style={{fontSize:"72px",marginBottom:"16px"}}>{gs.winner===myIndex?"🏆":"💀"}</div>
-            <h1 style={{fontSize:"36px",fontWeight:"900",background:gs.winner===myIndex?"linear-gradient(180deg,#f0d48a,#c9a84c)":"linear-gradient(180deg,#ff8888,#c03030)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:"0 0 8px"}}>
+      {/* WINNER */}
+      {gs.winner!==null&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+          <div style={{textAlign:"center",padding:"48px",background:"linear-gradient(135deg,#0a1220,#162030)",border:"2px solid #c9a84c",borderRadius:"16px",maxWidth:"420px",animation:"fadeIn .4s ease"}}>
+            <div style={{fontSize:"80px",marginBottom:"14px"}}>{gs.winner===myIndex?"🏆":"💀"}</div>
+            <h1 style={{fontSize:"40px",fontWeight:"900",background:gs.winner===myIndex?"linear-gradient(180deg,#f0d48a,#c9a84c)":"linear-gradient(180deg,#ff8888,#c03030)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:"0 0 10px"}}>
               {gs.winner===myIndex?"VITÓRIA!":"DERROTA"}
             </h1>
-            <div style={{fontSize:"13px",color:"#6a5a3a",marginBottom:"20px",fontFamily:"'Crimson Text',serif",fontStyle:"italic"}}>
-              {gs.winner===myIndex?"Você dominou o campo de batalha!":"Que a próxima batalha seja sua!"}
+            <div style={{display:"flex",gap:"16px",justifyContent:"center",margin:"20px 0"}}>
+              {gs.players.map((p,i)=><div key={i} style={{background:"rgba(0,0,0,.5)",border:`1px solid ${i===gs.winner?"#4ade80":"#f87171"}`,borderRadius:"10px",padding:"12px 20px",textAlign:"center"}}>
+                <div style={{fontSize:"11px",color:"#c9a84c",marginBottom:"5px"}}>{p.name}</div>
+                <div style={{fontSize:"22px",color:p.life>0?"#4ade80":"#f87171",fontWeight:"bold"}}>❤️ {p.life}</div>
+              </div>)}
             </div>
-            <div style={{display:"flex",gap:"12px",justifyContent:"center",marginBottom:"20px"}}>
-              {gs.players.map((p,i)=>(
-                <div key={i} style={{background:"rgba(0,0,0,.5)",border:`1px solid ${i===gs.winner?"#4ade80":"#f87171"}`,borderRadius:"8px",padding:"10px 16px",textAlign:"center"}}>
-                  <div style={{fontSize:"11px",color:"#c9a84c",marginBottom:"4px"}}>{p.name}</div>
-                  <div style={{fontSize:"18px",color:p.life>0?"#4ade80":"#f87171",fontWeight:"bold"}}>❤️ {p.life}</div>
-                </div>
-              ))}
-            </div>
-            <button onClick={()=>window.location.reload()} style={btnStyle("#c9a84c","#1a0d05","#8b6914")}>
-              🔄 Jogar Novamente
-            </button>
+            <button onClick={()=>window.location.reload()} style={{background:"linear-gradient(135deg,#160a02,#3a2005)",border:"2px solid #c9a84c",color:"#f0d48a",padding:"12px 36px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"15px",letterSpacing:".1em"}}>🔄 Jogar Novamente</button>
           </div>
         </div>
       )}
@@ -333,221 +257,138 @@ export default function App() {
   );
 }
 
-// ─── HELPERS ────────────────────────────────────────────────
-const logColor = (type) => ({
-  error:"#ff8888", combat:"#ffd166", system:"#06d6a0", mana:"#74b9ff",
-  destroy:"#fd79a8", draw:"#a29bfe", buff:"#55efc4", spell:"#fdcb6e", play:"#b8f0c8"
-}[type] || "#8a8a9a");
-
-const btnStyle = (border, bg, hoverBorder, prominent=false) => ({
-  background:`linear-gradient(135deg,${bg},${bg}dd)`,
-  border:`1.5px solid ${border}`,
-  color:border,
-  padding: prominent ? "8px 16px" : "6px 14px",
-  borderRadius:"4px",
-  cursor:"pointer",
-  fontFamily:"'Cinzel',serif",
-  fontSize: prominent ? "13px" : "12px",
-  letterSpacing:".05em",
-  transition:"all .2s",
-  animation: prominent ? "glow 2s infinite" : "none",
-});
-
-// ─── SUB COMPONENTS ────────────────────────────────────────
-
-function PlayerBar({ player, isActive, compact }) {
-  const lc = player.life > 10 ? "#4ade80" : player.life > 5 ? "#facc15" : "#f87171";
+// ── Player Bar ──
+function PBar({player,active,compact}) {
+  const lc = player.life>10?"#4ade80":player.life>5?"#facc15":"#f87171";
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
-      <div style={{ fontFamily:"'Cinzel',serif", fontWeight:"700", fontSize:compact?"12px":"13px", color:isActive?"#f0d48a":"#5a4a2a", minWidth:"110px" }}>
-        {isActive && <span style={{color:"#4ade80",marginRight:"5px",animation:"pulse 1s infinite"}}>●</span>}
-        {player.name}
+    <div style={{display:"flex",alignItems:"center",gap:"10px",padding:compact?"1px 0":"3px 0"}}>
+      <div style={{fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:compact?"11px":"13px",color:active?"#f0d48a":"#3a2a12",minWidth:"95px",transition:"color .3s"}}>
+        {active&&<span style={{color:"#4ade80",marginRight:"5px",animation:"pulse 1s infinite"}}>●</span>}{player.name}
       </div>
-      <div style={{ background:"rgba(0,0,0,.5)", border:`1px solid ${lc}`, borderRadius:"6px", padding:"2px 10px", display:"flex", alignItems:"center", gap:"4px" }}>
-        <span>❤️</span><span style={{ color:lc, fontWeight:"bold", fontSize:"15px", fontFamily:"'Cinzel',serif" }}>{player.life}</span>
-      </div>
-      <div style={{ fontSize:"10px", color:"#3a5a7a", display:"flex", gap:"6px" }}>
-        <span>📚{player.deck?.length||0}</span>
-        <span>🪦{player.graveyard?.length||0}</span>
+      <div style={{background:"rgba(0,0,0,.6)",border:`1.5px solid ${lc}`,borderRadius:"7px",padding:"2px 10px",display:"flex",alignItems:"center",gap:"4px",boxShadow:`0 0 10px ${lc}30`}}>
+        <span>❤️</span><span style={{color:lc,fontWeight:"bold",fontSize:"16px",fontFamily:"'Cinzel',serif"}}>{player.life}</span>
       </div>
     </div>
   );
 }
 
-function ManaPool({ pool }) {
-  const types = [{k:"W",e:"☀️"},{k:"U",e:"💧"},{k:"B",e:"💀"},{k:"R",e:"🔥"},{k:"G",e:"🌿"}];
-  const total = Object.values(pool||{}).reduce((a,b)=>a+b,0);
-  if (!total) return <div style={{fontSize:"10px",color:"#2a1a0a",textAlign:"center"}}>Sem mana</div>;
+// ── Mana ──
+function Mana({pool}) {
+  const types=[{k:"W",e:"☀️"},{k:"U",e:"💧"},{k:"B",e:"💀"},{k:"R",e:"🔥"},{k:"G",e:"🌿"}];
+  const tot=Object.values(pool||{}).reduce((a,b)=>a+b,0);
+  if(!tot) return <div style={{fontSize:"10px",color:"#100a04",textAlign:"center"}}>Sem mana</div>;
+  return <div style={{display:"flex",flexWrap:"wrap",gap:"3px",justifyContent:"center"}}>
+    {types.map(({k,e})=>(pool[k]||0)>0&&<div key={k} style={{background:"rgba(0,0,0,.6)",border:"1px solid #1a2a3a",borderRadius:"10px",padding:"2px 6px",fontSize:"11px"}}>{Array(pool[k]).fill(0).map((_,i)=><span key={i}>{e}</span>)}</div>)}
+  </div>;
+}
+
+// ── Step Tracker ──
+function Steps({step,turn,tn,mi}) {
+  const ss=["untap","upkeep","draw","main1","combat","main2","end"];
+  const ic={untap:"🔄",upkeep:"⬆️",draw:"📖",main1:"1",combat:"⚔️",main2:"2",end:"🌙"};
+  return <div style={{textAlign:"center"}}>
+    <div style={{fontSize:"11px",color:turn===mi?"#f0d48a":"#3a5a7a",letterSpacing:".07em",marginBottom:"4px",fontWeight:"600"}}>T{tn} — {turn===mi?"SEU TURNO":"OPONENTE"}</div>
+    <div style={{display:"flex",gap:"2px",justifyContent:"center"}}>
+      {ss.map(s=><div key={s} title={STEP_LABELS[s]} style={{width:"22px",height:"22px",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",background:s===step?STEP_COLORS[s]:"rgba(0,0,0,.5)",border:`1px solid ${s===step?STEP_COLORS[s]:"#14202e"}`,boxShadow:s===step?`0 0 10px ${STEP_COLORS[s]}`:"none",transition:"all .3s"}}>{ic[s]}</div>)}
+    </div>
+  </div>;
+}
+
+// ── Battlefield Card ──
+function BCard({card,atk,blk,tgt,onClick,onHov}) {
+  if(card.hidden) return null;
+  const st=getCardStyle(card);
   return (
-    <div style={{ display:"flex", flexWrap:"wrap", gap:"3px", justifyContent:"center" }}>
-      {types.map(({k,e})=>(pool[k]||0)>0&&(
-        <div key={k} style={{ background:"rgba(0,0,0,.5)", border:"1px solid #2a3a4a", borderRadius:"10px", padding:"2px 5px", fontSize:"10px" }}>
-          {Array(pool[k]).fill(0).map((_,i)=><span key={i}>{e}</span>)}
-        </div>
-      ))}
+    <div className="bcard" onClick={onClick}
+      onMouseEnter={()=>onHov&&onHov(card)} onMouseLeave={()=>onHov&&onHov(null)}
+      style={{width:"86px",height:"120px",borderRadius:"9px",background:st.bg,border:`2px solid ${atk?"#e17055":blk?"#74b9ff":tgt?"#55efc4":st.border}`,
+        boxShadow:atk?"0 0 20px #e17055":blk?"0 0 20px #74b9ff":tgt?"0 0 16px #55efc4":"0 4px 14px rgba(0,0,0,.85)",
+        cursor:"pointer",transform:card.tapped?"rotate(90deg)":"none",transition:"transform .3s,box-shadow .2s,border-color .2s",
+        flexShrink:0,position:"relative",filter:card.summoningSick?"brightness(.55)":"none",overflow:"hidden",
+        animation:atk?"atk 1.5s infinite":tgt?"tgt 1.5s infinite":"none"}}>
+      <CardImage name={card.name} style={{borderRadius:"7px"}}/>
+      {card.type==="creature"&&<div style={{position:"absolute",bottom:"3px",right:"4px",background:"rgba(0,0,0,.88)",borderRadius:"4px",padding:"1px 5px",fontSize:"11px",fontWeight:"bold",color:"#f0d48a",fontFamily:"'Cinzel',serif"}}>{card.power}/{card.toughness}</div>}
+      {card.tapped&&<div style={{position:"absolute",top:"2px",left:"2px",fontSize:"8px",background:"rgba(0,0,0,.75)",borderRadius:"3px",padding:"1px 3px"}}>🔄</div>}
+      {card.summoningSick&&<div style={{position:"absolute",top:"2px",right:"2px",fontSize:"8px",background:"rgba(0,0,0,.75)",borderRadius:"3px",padding:"1px 3px"}}>💤</div>}
     </div>
   );
 }
 
-function StepTracker({ step, turn, turnNumber, myIndex }) {
-  const steps = ["untap","upkeep","draw","main1","combat","main2","end"];
-  const icons = { untap:"🔄",upkeep:"⬆️",draw:"📖",main1:"1",combat:"⚔️",main2:"2",end:"🌙" };
+// ── Hand Card ──
+function HCard({card,sel,can,myTurn,step,onClick,onHov}) {
+  const st=getCardStyle(card);
+  const cmc=calcCMC(card.cost);
+  const play=myTurn&&(card.type==="land"?["main1","main2"].includes(step):["main1","main2","combat"].includes(step));
   return (
-    <div style={{ textAlign:"center" }}>
-      <div style={{ fontSize:"10px", color:"#4a5a6a", letterSpacing:".1em", marginBottom:"4px" }}>
-        T{turnNumber} — {turn===myIndex?"SEU TURNO":"OPONENTE"}
+    <div className="hcard" onClick={onClick}
+      onMouseEnter={()=>onHov&&onHov(card)} onMouseLeave={()=>onHov&&onHov(null)}
+      style={{minWidth:"116px",maxWidth:"116px",height:"162px",borderRadius:"10px",background:st.bg,
+        border:`2px solid ${sel?"#f0d48a":can&&play?st.border:"#0e0e18"}`,
+        cursor:play?"pointer":"default",
+        boxShadow:sel?"0 0 28px #f0d48a,0 12px 36px rgba(0,0,0,.95)":can&&play?`0 6px 22px rgba(0,0,0,.85),0 0 8px ${st.border}45`:"0 3px 10px rgba(0,0,0,.7)",
+        opacity:!play?0.5:can?1:0.6,flexShrink:0,position:"relative",overflow:"hidden"}}>
+      <CardImage name={card.name} style={{borderRadius:"8px"}}/>
+      {sel&&<div style={{position:"absolute",inset:0,background:"rgba(240,212,138,.12)",borderRadius:"8px",pointerEvents:"none"}}/>}
+      {card.type!=="land"&&<div style={{position:"absolute",top:"4px",right:"4px",background:"rgba(0,0,0,.88)",borderRadius:"50%",width:"20px",height:"20px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",fontWeight:"bold",color:"#f0d48a"}}>{cmc}</div>}
+      {card.type==="creature"&&<div style={{position:"absolute",bottom:"4px",right:"4px",background:"rgba(0,0,0,.88)",borderRadius:"4px",padding:"1px 5px",fontSize:"11px",fontWeight:"bold",color:"#f0d48a",fontFamily:"'Cinzel',serif"}}>{card.power}/{card.toughness}</div>}
+    </div>
+  );
+}
+
+// ── Menu ──
+function Menu({name,setName,colors,setColors,code,setCode,error,onCreate,onJoin}) {
+  const cls=[{k:"W",e:"☀️",n:"Branco"},{k:"U",e:"💧",n:"Azul"},{k:"B",e:"💀",n:"Preto"},{k:"R",e:"🔥",n:"Vermelho"},{k:"G",e:"🌿",n:"Verde"}];
+  const tog=k=>setColors(s=>s.includes(k)?s.filter(x=>x!==k):[...s,k]);
+  return (
+    <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 40%,#0c1828,#030710)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",gap:"22px",padding:"20px"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap');`}</style>
+      <div style={{fontSize:"62px",filter:"drop-shadow(0 0 40px #c9a84c)"}}>⚔️</div>
+      <div style={{textAlign:"center"}}>
+        <h1 style={{fontSize:"48px",fontWeight:"900",background:"linear-gradient(180deg,#f0d48a,#c9a84c)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:0,letterSpacing:".05em"}}>MAGIC</h1>
+        <h2 style={{fontSize:"13px",fontWeight:"400",letterSpacing:".5em",color:"#4a3a1a",margin:"4px 0 0",textTransform:"uppercase"}}>The Gathering — Multiplayer</h2>
       </div>
-      <div style={{ display:"flex", gap:"2px", justifyContent:"center" }}>
-        {steps.map(s=>(
-          <div key={s} title={STEP_LABELS[s]} style={{
-            width:"20px",height:"20px",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",
-            background:s===step?STEP_COLORS[s]:"rgba(0,0,0,.4)",
-            border:`1px solid ${s===step?STEP_COLORS[s]:"#1e2d40"}`,
-            boxShadow:s===step?`0 0 8px ${STEP_COLORS[s]}`:"none",
-            cursor:"default",
-          }}>{icons[s]}</div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function BFCard({ card, isAttacker, isBlocker, isTargetable, onClick }) {
-  if (card.hidden) return null;
-  const style = getCardStyle(card);
-  return (
-    <div onClick={onClick} style={{
-      width:"60px", height:"85px", borderRadius:"5px",
-      background:style.bg,
-      border:`2px solid ${isAttacker?"#e17055":isBlocker?"#74b9ff":isTargetable?"#55efc4":style.border}`,
-      boxShadow:isAttacker?"0 0 14px #e17055":isBlocker?"0 0 14px #74b9ff":isTargetable?"0 0 10px #55efc4":"0 2px 8px rgba(0,0,0,.7)",
-      display:"flex", flexDirection:"column", padding:"3px", gap:"1px",
-      cursor:"pointer",
-      transform:card.tapped?"rotate(90deg)":"none",
-      transition:"transform .3s, box-shadow .2s, border-color .2s",
-      flexShrink:0, position:"relative",
-      filter:card.summoningSick?"brightness(.65)":"none",
-      animation:isAttacker?"attackGlow 1.5s infinite":isTargetable?"glow 1.5s infinite":"none",
-    }}>
-      <div style={{ fontSize:"7px", color:style.text, fontWeight:"600", fontFamily:"'Cinzel',serif", lineHeight:"1.1", textAlign:"center" }}>{card.name}</div>
-      <div style={{ fontSize:"20px", textAlign:"center", flex:1, display:"flex", alignItems:"center", justifyContent:"center" }}>{card.art}</div>
-      {card.type==="creature" && <div style={{fontSize:"9px",fontWeight:"bold",color:"#f0d48a",textAlign:"center",fontFamily:"'Cinzel',serif"}}>{card.power}/{card.toughness}</div>}
-      {card.type==="land" && <div style={{fontSize:"7px",color:style.text,textAlign:"center",opacity:.8}}>Terra</div>}
-      {card.tapped && <div style={{position:"absolute",top:"1px",left:"1px",fontSize:"7px",opacity:.7}}>🔄</div>}
-      {card.summoningSick && <div style={{position:"absolute",top:"1px",right:"1px",fontSize:"7px",opacity:.7}}>💤</div>}
-    </div>
-  );
-}
-
-function HandCard({ card, isSelected, canAfford, isMyTurn, step, onClick }) {
-  const style = getCardStyle(card);
-  const cmc = calcCMC(card.cost);
-  const playable = isMyTurn && (card.type==="land" ? ["main1","main2"].includes(step) : ["main1","main2","combat"].includes(step));
-  return (
-    <div className="chover" onClick={onClick} style={{
-      minWidth:"88px", maxWidth:"88px", height:"124px", borderRadius:"8px",
-      background:style.bg,
-      border:`2px solid ${isSelected?"#f0d48a":canAfford&&playable?style.border:"#1a1a2a"}`,
-      cursor:playable?"pointer":"default",
-      boxShadow:isSelected?"0 0 18px #f0d48a,0 8px 20px rgba(0,0,0,.8)":canAfford&&playable?`0 4px 14px rgba(0,0,0,.7),0 0 5px ${style.border}40`:"0 2px 8px rgba(0,0,0,.6)",
-      display:"flex", flexDirection:"column", padding:"5px", gap:"2px",
-      opacity:canAfford||card.type==="land"?1:.5,
-      flexShrink:0, position:"relative",
-    }}>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-        <div style={{ fontSize:"8px", color:style.text, fontWeight:"600", lineHeight:"1.1", flex:1, fontFamily:"'Cinzel',serif" }}>{card.name}</div>
-        {card.type!=="land" && <div style={{ fontSize:"8px", background:"rgba(0,0,0,.5)", borderRadius:"8px", padding:"1px 3px", color:"#f0d48a", marginLeft:"2px" }}>{cmc}</div>}
-      </div>
-      <div style={{ fontSize:"26px", textAlign:"center", flex:1, display:"flex", alignItems:"center", justifyContent:"center" }}>{card.art}</div>
-      <div style={{ fontSize:"7px", color:style.text, opacity:.8, textAlign:"center", fontStyle:"italic" }}>{card.subtype||card.type}</div>
-      {card.type==="creature" && <div style={{ fontSize:"10px", fontWeight:"bold", color:"#f0d48a", textAlign:"center", fontFamily:"'Cinzel',serif", background:"rgba(0,0,0,.4)", borderRadius:"3px" }}>{card.power}/{card.toughness}</div>}
-    </div>
-  );
-}
-
-// ─── MENU ──────────────────────────────────────────────────
-function MenuScreen({ playerName, setPlayerName, selectedColors, setSelectedColors, joinCode, setJoinCode, error, onCreate, onJoin }) {
-  const colors = [
-    {k:"W",e:"☀️",n:"Branco"},{k:"U",e:"💧",n:"Azul"},
-    {k:"B",e:"💀",n:"Preto"},{k:"R",e:"🔥",n:"Vermelho"},{k:"G",e:"🌿",n:"Verde"}
-  ];
-  const toggle = k => setSelectedColors(s => s.includes(k) ? s.filter(x=>x!==k) : [...s,k]);
-
-  return (
-    <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at center,#0d1a2e 0%,#050810 100%)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'Cinzel',Georgia,serif", color:"#e8d5a3", gap:"20px", padding:"20px" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital@0;1&display=swap');`}</style>
-      <div style={{fontSize:"60px",filter:"drop-shadow(0 0 30px #c9a84c)"  }}>⚔️</div>
-      <h1 style={{ fontSize:"42px", fontWeight:"900", background:"linear-gradient(180deg,#f0d48a,#c9a84c)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", margin:0, letterSpacing:".05em" }}>MAGIC</h1>
-      <h2 style={{ fontSize:"16px", fontWeight:"400", letterSpacing:".4em", color:"#6a5a3a", margin:"-16px 0 0", textTransform:"uppercase" }}>The Gathering — Multiplayer</h2>
-
-      {/* Name */}
-      <input value={playerName} onChange={e=>setPlayerName(e.target.value)} placeholder="Seu nome de mago..."
-        style={{ background:"rgba(0,0,0,.5)", border:"1px solid #3a2a1a", borderRadius:"6px", padding:"10px 16px", color:"#e8d5a3", fontFamily:"'Cinzel',serif", fontSize:"14px", width:"280px", outline:"none", textAlign:"center" }} />
-
-      {/* Colors */}
+      <input value={name} onChange={e=>setName(e.target.value)} placeholder="Seu nome de mago..."
+        style={{background:"rgba(0,0,0,.6)",border:"1px solid #241808",borderRadius:"7px",padding:"11px 18px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"14px",width:"300px",outline:"none",textAlign:"center"}}/>
       <div>
-        <div style={{ textAlign:"center", fontSize:"11px", color:"#6a5a3a", letterSpacing:".1em", marginBottom:"8px" }}>ESCOLHA SUAS CORES (1–3)</div>
-        <div style={{ display:"flex", gap:"8px", justifyContent:"center" }}>
-          {colors.map(c=>{
-            const sel = selectedColors.includes(c.k);
-            const st = COLOR_STYLES[c.k];
-            return (
-              <div key={c.k} onClick={()=>toggle(c.k)} style={{
-                width:"56px", padding:"8px 4px", borderRadius:"6px", textAlign:"center", cursor:"pointer",
-                background:sel?st.bg:"rgba(0,0,0,.3)", border:`2px solid ${sel?st.border:"#1a1a2a"}`,
-                transform:sel?"scale(1.08)":"scale(1)", transition:"all .2s",
-              }}>
-                <div style={{fontSize:"22px"}}>{c.e}</div>
-                <div style={{fontSize:"8px",color:sel?st.text:"#3a3a4a",marginTop:"3px",fontWeight:"600"}}>{c.n}</div>
-              </div>
-            );
+        <div style={{textAlign:"center",fontSize:"10px",color:"#4a3a18",letterSpacing:".15em",marginBottom:"10px"}}>ESCOLHA SUAS CORES (1–3)</div>
+        <div style={{display:"flex",gap:"10px",justifyContent:"center"}}>
+          {cls.map(c=>{const sel=colors.includes(c.k);const st=COLOR_STYLES[c.k];return(
+            <div key={c.k} onClick={()=>tog(c.k)} style={{width:"62px",padding:"10px 6px",borderRadius:"8px",textAlign:"center",cursor:"pointer",background:sel?st.bg:"rgba(0,0,0,.4)",border:`2px solid ${sel?st.border:"#101014"}`,transform:sel?"scale(1.1)":"scale(1)",transition:"all .2s",boxShadow:sel?`0 0 16px ${st.border}50`:"none"}}>
+              <div style={{fontSize:"26px"}}>{c.e}</div>
+              <div style={{fontSize:"9px",color:sel?st.text:"#2a2a38",marginTop:"4px",fontWeight:"600"}}>{c.n}</div>
+            </div>);
           })}
         </div>
       </div>
-
-      {error && <div style={{color:"#ff8888",fontSize:"12px",background:"rgba(80,0,0,.4)",padding:"6px 12px",borderRadius:"4px"}}>{error}</div>}
-
-      {/* Buttons */}
-      <div style={{ display:"flex", gap:"12px", flexWrap:"wrap", justifyContent:"center" }}>
-        <button onClick={onCreate} disabled={selectedColors.length===0||!playerName.trim()} style={{
-          background:"linear-gradient(135deg,#1a3a0a,#2a6a15)", border:"2px solid #4a9a25", color:"#a0e060",
-          padding:"12px 28px", borderRadius:"6px", cursor:"pointer", fontFamily:"'Cinzel',serif", fontSize:"14px", letterSpacing:".08em",
-          opacity:selectedColors.length===0||!playerName.trim()?0.4:1,
-        }}>
-          🏰 Criar Sala
-        </button>
-        <div style={{display:"flex",gap:"6px"}}>
-          <input value={joinCode} onChange={e=>setJoinCode(e.target.value.toUpperCase())} placeholder="CÓDIGO" maxLength={5}
-            style={{ background:"rgba(0,0,0,.5)", border:"1px solid #3a2a1a", borderRadius:"6px", padding:"10px 12px", color:"#e8d5a3", fontFamily:"'Cinzel',serif", fontSize:"14px", width:"100px", outline:"none", textAlign:"center", letterSpacing:".2em" }} />
-          <button onClick={onJoin} disabled={!joinCode.trim()||selectedColors.length===0||!playerName.trim()} style={{
-            background:"linear-gradient(135deg,#1a0a3a,#2a1568)", border:"2px solid #4a25a0", color:"#9060e0",
-            padding:"10px 20px", borderRadius:"6px", cursor:"pointer", fontFamily:"'Cinzel',serif", fontSize:"14px",
-            opacity:!joinCode.trim()||selectedColors.length===0||!playerName.trim()?0.4:1,
-          }}>
-            ⚡ Entrar
-          </button>
+      {error&&<div style={{color:"#ff8888",fontSize:"12px",background:"rgba(50,0,0,.5)",padding:"7px 14px",borderRadius:"5px",border:"1px solid #703030"}}>{error}</div>}
+      <div style={{display:"flex",gap:"12px",flexWrap:"wrap",justifyContent:"center"}}>
+        <button onClick={onCreate} disabled={colors.length===0||!name.trim()} style={{background:"linear-gradient(135deg,#081804,#163c0c)",border:"2px solid #347020",color:"#68c040",padding:"13px 30px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"14px",letterSpacing:".08em",opacity:colors.length===0||!name.trim()?0.3:1}}>🏰 Criar Sala</button>
+        <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+          <input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="CÓDIGO" maxLength={5}
+            style={{background:"rgba(0,0,0,.6)",border:"1px solid #201408",borderRadius:"7px",padding:"11px 12px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"16px",width:"108px",outline:"none",textAlign:"center",letterSpacing:".3em"}}/>
+          <button onClick={onJoin} disabled={!code.trim()||colors.length===0||!name.trim()} style={{background:"linear-gradient(135deg,#06041c,#10083a)",border:"2px solid #281898",color:"#5840d0",padding:"11px 20px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"14px",opacity:!code.trim()||colors.length===0||!name.trim()?0.3:1}}>⚡ Entrar</button>
         </div>
       </div>
-      <p style={{fontFamily:"'Crimson Text',serif",fontStyle:"italic",color:"#3a2a1a",fontSize:"13px",textAlign:"center",maxWidth:"320px"}}>
-        Crie uma sala e compartilhe o código com seu oponente, ou entre em uma sala existente.
-      </p>
     </div>
   );
 }
 
-function LobbyScreen({ code, msg }) {
-  const copy = () => navigator.clipboard?.writeText(code);
+// ── Lobby ──
+function Lobby({code,msg}) {
+  const [cp,setCp]=useState(false);
   return (
-    <div style={{ minHeight:"100vh", background:"radial-gradient(ellipse at center,#0d1a2e,#050810)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'Cinzel',Georgia,serif", color:"#e8d5a3", gap:"20px" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap');`}</style>
-      <div style={{fontSize:"48px",animation:"pulse 1.5s infinite"}}>🔮</div>
+    <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at center,#0c1828,#03060f)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",gap:"24px"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap'); @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+      <div style={{fontSize:"54px",animation:"pulse 1.5s infinite"}}>🔮</div>
       <h2 style={{fontSize:"20px",letterSpacing:".2em",color:"#c9a84c",margin:0}}>AGUARDANDO OPONENTE</h2>
-      <div style={{background:"rgba(0,0,0,.6)",border:"2px solid #c9a84c",borderRadius:"8px",padding:"16px 32px",textAlign:"center",cursor:"pointer"}} onClick={copy}>
-        <div style={{fontSize:"11px",color:"#6a5a3a",letterSpacing:".2em",marginBottom:"6px"}}>CÓDIGO DA SALA</div>
-        <div style={{fontSize:"32px",fontWeight:"900",letterSpacing:".3em",color:"#f0d48a"}}>{code}</div>
-        <div style={{fontSize:"10px",color:"#4a3a1a",marginTop:"6px"}}>Clique para copiar</div>
+      <div onClick={()=>{navigator.clipboard?.writeText(code);setCp(true);setTimeout(()=>setCp(false),2000);}}
+        style={{background:"rgba(0,0,0,.7)",border:"2px solid #c9a84c",borderRadius:"10px",padding:"20px 44px",textAlign:"center",cursor:"pointer",boxShadow:"0 0 32px #c9a84c25",transition:"all .2s"}}>
+        <div style={{fontSize:"11px",color:"#4a3a18",letterSpacing:".2em",marginBottom:"8px"}}>CÓDIGO DA SALA — CLIQUE PARA COPIAR</div>
+        <div style={{fontSize:"42px",fontWeight:"900",letterSpacing:".4em",color:"#f0d48a"}}>{code}</div>
+        {cp&&<div style={{fontSize:"11px",color:"#4ade80",marginTop:"6px"}}>✓ Copiado!</div>}
       </div>
-      <p style={{color:"#4a5a6a",fontSize:"13px",fontFamily:"serif",fontStyle:"italic"}}>{msg}</p>
+      <p style={{color:"#2a3a4a",fontSize:"12px",fontStyle:"italic"}}>{msg}</p>
     </div>
   );
 }
+
