@@ -198,6 +198,7 @@ export default function App() {
   };
 
   const clickCreature = (card, isOpp) => {
+    // Se está no modo de selecionar alvo para feitiço
     if (selCard && targetMode) {
       if ((targetMode==="opp"&&isOpp)||(targetMode==="my"&&!isOpp)) {
         emit("cast_card",{cardUid:selCard,targetUid:card.uid});
@@ -205,12 +206,21 @@ export default function App() {
       }
       return;
     }
-    // ✅ FIX: Llanowar Elves e criaturas com tap_mana geram mana ao clicar
-    if (isMy && !isOpp && card.abilities && card.abilities.includes("tap_mana") && !card.tapped && !card.summoningSick) {
+    // Llanowar Elves e tap_mana — só fora do combate
+    if (isMy && !isOpp && card.abilities && card.abilities.includes("tap_mana") && !card.tapped && !card.summoningSick && cp !== "declare_attackers") {
       emit("tap_creature", {cardUid: card.uid});
       return;
     }
-    if (isMy && cp==="declare_attackers" && !isOpp) emit("toggle_attacker",{cardUid:card.uid});
+    // Selecionar atacante
+    if (isMy && cp==="declare_attackers" && !isOpp) {
+      if (card.tapped || card.summoningSick) {
+        showError(card.summoningSick ? "💤 Doença de invocação! Espere o próximo turno." : "Criatura já está virada!");
+        return;
+      }
+      emit("toggle_attacker",{cardUid:card.uid});
+      return;
+    }
+    // Selecionar bloqueador
     if (isDef && cp==="declare_blockers" && !isOpp && atks.length>0) {
       const first = atks.find(a=>!blks[a]);
       if (first) emit("toggle_blocker",{blockerUid:card.uid,attackerUid:first});
@@ -295,7 +305,10 @@ export default function App() {
               {step==="main2"&&<button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>🌙 Fim de Turno</button>}
               {step==="end"&&<button style={btn("#636e72","#0a0b0c",true)} onClick={()=>emit("advance_step")}>→ Próximo Turno</button>}
             </>}
-            {isMy&&cp==="declare_attackers"&&<button style={{...btn("#e17055","#150601",true),animation:"atk 1.5s infinite"}} onClick={()=>emit("declare_attackers")}>⚔️ Confirmar Ataque ({atks.length})</button>}
+            {isMy&&cp==="declare_attackers"&&<>
+              <div style={{fontSize:"11px",color:"#e17055",textAlign:"center",animation:"pulse 1s infinite",background:"rgba(80,20,0,.5)",border:"1px solid #e17055",borderRadius:"5px",padding:"5px 8px"}}>⚔️ Clique nas criaturas para atacar!</div>
+              <button style={{...btn("#e17055","#150601",true),animation:"atk 1.5s infinite"}} onClick={()=>emit("declare_attackers")}>⚔️ Confirmar Ataque ({atks.length})</button>
+            </>}
             {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️ Confirmar Bloqueio</button>}
             {!isMy&&!cp&&<div style={{fontSize:"11px",color:"#2a4a6a",fontStyle:"italic",textAlign:"center",animation:"pulse 2s infinite"}}>⏳ Aguardando oponente...</div>}
           </div>
