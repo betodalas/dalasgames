@@ -2,10 +2,59 @@
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Magic: The Gathering</title>
+
+    <!-- PWA: ícone na tela inicial -->
+    <link rel="icon" href="%PUBLIC_URL%/icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="%PUBLIC_URL%/icons/icon-192.png" />
+
+    <!-- PWA: viewport e tema -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#c9a84c" />
+    <meta name="background-color" content="#060809" />
+
+    <!-- PWA: tela cheia no iOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Dalas Games" />
+
+    <!-- PWA: tela cheia no Android -->
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- SEO / compartilhamento -->
+    <meta name="description" content="Jogo de cartas multiplayer online — Dalas Games" />
+
+    <!-- PWA manifest -->
+    <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+    <title>Dalas Games — Card Battle</title>
+
+    <style>
+      /* Previne scroll e seleção de texto durante o jogo */
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        user-select: none;
+      }
+    </style>
   </head>
   <body>
+    <noscript>Você precisa habilitar JavaScript para jogar.</noscript>
     <div id="root"></div>
+
+    <!-- PWA: registra service worker -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker
+            .register('/service-worker.js')
+            .then(reg => console.log('✅ PWA ativo'))
+            .catch(err => console.log('SW erro:', err));
+        });
+      }
+    </script>
   </body>
 </html>
