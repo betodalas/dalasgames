@@ -345,6 +345,16 @@ export default function App() {
   if (screen==="menu") return <Menu name={playerName} setName={setPlayerName} colors={selColors} setColors={setSelColors} code={joinCode} setCode={setJoinCode} error={error}
     onCreate={()=>{ if(!playerName.trim()){showError("Digite seu nome!");return;} const s=connect(); s.on("room_created",({code})=>{ saveSession(code,playerName,selColors); }); s.emit("create_room",{name:playerName,colors:selColors}); s.emit("set_player_info",{name:playerName,colors:selColors}); }}
     onJoin={()=>{ if(!playerName.trim()||!joinCode.trim()){showError("Preencha nome e código!");return;} const s=connect(); saveSession(joinCode.trim().toUpperCase(),playerName,selColors); s.emit("join_room",{code:joinCode.trim().toUpperCase(),name:playerName,colors:selColors}); }}
+    onVsBot={()=>setScreen("difficulty")}
+  />;
+  if (screen==="difficulty") return <DifficultyScreen name={playerName} setName={setPlayerName} colors={selColors} setColors={setSelColors} error={error}
+    onStart={(difficulty)=>{
+      if(!playerName.trim()){showError("Digite seu nome!");return;}
+      const s=connect();
+      s.emit("create_vs_bot",{name:playerName,colors:selColors,difficulty});
+      saveSession("BOT_"+difficulty, playerName, selColors);
+    }}
+    onBack={()=>setScreen("menu")}
   />;
   if (screen==="lobby") return <Lobby code={roomCode} msg={waitMsg} />;
   if (!gs||!me||!opp) return <div style={{color:"#fff",display:"flex",height:"100vh",alignItems:"center",justifyContent:"center",fontFamily:"serif",fontSize:"18px"}}>🔮 Conectando...</div>;
@@ -603,7 +613,7 @@ function HCard({card,sel,can,myTurn,step,onClick,onHov}) {
 }
 
 // ── Menu ──
-function Menu({name,setName,colors,setColors,code,setCode,error,onCreate,onJoin}) {
+function Menu({name,setName,colors,setColors,code,setCode,error,onCreate,onJoin,onVsBot}) {
   const cls=[{k:"W",e:"☀️",n:"Branco"},{k:"U",e:"💧",n:"Azul"},{k:"B",e:"💀",n:"Preto"},{k:"R",e:"🔥",n:"Vermelho"},{k:"G",e:"🌿",n:"Verde"}];
   const tog=k=>setColors(s=>s.includes(k)?s.filter(x=>x!==k):[...s,k]);
   return (
@@ -642,6 +652,61 @@ function Menu({name,setName,colors,setColors,code,setCode,error,onCreate,onJoin}
           <button onClick={onJoin} disabled={!code.trim()||colors.length===0||!name.trim()} style={{background:"linear-gradient(135deg,#06041c,#10083a)",border:"2px solid #281898",color:"#5840d0",padding:"11px 20px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"14px",opacity:!code.trim()||colors.length===0||!name.trim()?0.3:1}}>⚡ Entrar</button>
         </div>
       </div>
+      <div style={{width:"100%",maxWidth:"360px",borderTop:"1px solid #1a1208",paddingTop:"16px",display:"flex",flexDirection:"column",alignItems:"center",gap:"8px"}}>
+        <div style={{fontSize:"10px",color:"#3a2a12",letterSpacing:".2em"}}>— MODO SINGLEPLAYER —</div>
+        <button onClick={onVsBot} disabled={colors.length===0||!name.trim()} style={{background:"linear-gradient(135deg,#1a0a20,#3a1050)",border:"2px solid #8a30c0",color:"#c060f0",padding:"13px 40px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"14px",letterSpacing:".08em",width:"100%",opacity:colors.length===0||!name.trim()?0.3:1}}>🤖 Jogar vs Computador</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Difficulty Screen ──
+function DifficultyScreen({name,setName,colors,setColors,error,onStart,onBack}) {
+  const cls=[{k:"W",e:"☀️",n:"Branco"},{k:"U",e:"💧",n:"Azul"},{k:"B",e:"💀",n:"Preto"},{k:"R",e:"🔥",n:"Vermelho"},{k:"G",e:"🌿",n:"Verde"}];
+  const tog=k=>setColors(s=>s.includes(k)?s.filter(x=>x!==k):[...s,k]);
+  const difficulties = [
+    { id:"random", icon:"🎲", name:"Aleatório",   desc:"Joga cartas e ataca sem estratégia. Bom para aprender.",  color:"#55efc4", bg:"#031a12" },
+    { id:"basic",  icon:"📚", name:"Básico",      desc:"Usa mana eficientemente e ataca quando tem vantagem.",     color:"#74b9ff", bg:"#010c20" },
+    { id:"medium", icon:"🌑", name:"Médio",       desc:"Considera bloqueios, remoções e prioridades de ameaças.",  color:"#a29bfe", bg:"#08031a" },
+    { id:"hard",   icon:"💀", name:"Difícil",     desc:"Avalia o estado do jogo. Busca combinações letais.",       color:"#e17055", bg:"#1a0501" },
+  ];
+  return (
+    <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 40%,#0c0820,#03020f)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",gap:"20px",padding:"20px"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap'); @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+      <button onClick={onBack} style={{position:"absolute",top:"20px",left:"20px",background:"none",border:"1px solid #2a1a08",color:"#6a5a38",padding:"6px 14px",borderRadius:"5px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"12px"}}>← Voltar</button>
+      <div style={{fontSize:"52px",filter:"drop-shadow(0 0 30px #8a30c0)"}}>🤖</div>
+      <div style={{textAlign:"center"}}>
+        <h1 style={{fontSize:"32px",fontWeight:"900",background:"linear-gradient(180deg,#c060f0,#8a30c0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:0}}>VS COMPUTADOR</h1>
+        <p style={{fontSize:"11px",color:"#4a3a5a",letterSpacing:".2em",margin:"6px 0 0"}}>ESCOLHA A DIFICULDADE</p>
+      </div>
+      {/* Nome */}
+      <input value={name} onChange={e=>setName(e.target.value)} placeholder="Seu nome de mago..."
+        style={{background:"rgba(0,0,0,.6)",border:"1px solid #2a1030",borderRadius:"7px",padding:"10px 18px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"14px",width:"280px",outline:"none",textAlign:"center"}}/>
+      {/* Cores */}
+      <div>
+        <div style={{textAlign:"center",fontSize:"10px",color:"#4a3a18",letterSpacing:".15em",marginBottom:"8px"}}>SUAS CORES</div>
+        <div style={{display:"flex",gap:"8px",justifyContent:"center"}}>
+          {cls.map(c=>{const sel=colors.includes(c.k);const st=COLOR_STYLES[c.k];return(
+            <div key={c.k} onClick={()=>tog(c.k)} style={{width:"52px",padding:"8px 4px",borderRadius:"8px",textAlign:"center",cursor:"pointer",background:sel?st.bg:"rgba(0,0,0,.4)",border:`2px solid ${sel?st.border:"#101014"}`,transform:sel?"scale(1.1)":"scale(1)",transition:"all .2s"}}>
+              <div style={{fontSize:"22px"}}>{c.e}</div>
+              <div style={{fontSize:"8px",color:sel?st.text:"#2a2a38",marginTop:"3px",fontWeight:"600"}}>{c.n}</div>
+            </div>);})}
+        </div>
+      </div>
+      {/* Dificuldades */}
+      <div style={{display:"flex",flexDirection:"column",gap:"10px",width:"100%",maxWidth:"400px"}}>
+        {difficulties.map(d=>(
+          <button key={d.id} onClick={()=>onStart(d.id)} disabled={!name.trim()||colors.length===0}
+            style={{background:`linear-gradient(135deg,${d.bg},rgba(0,0,0,.8))`,border:`2px solid ${d.color}`,color:d.color,padding:"14px 20px",borderRadius:"10px",cursor:"pointer",fontFamily:"'Cinzel',serif",textAlign:"left",display:"flex",alignItems:"center",gap:"14px",transition:"all .2s",opacity:!name.trim()||colors.length===0?0.3:1}}>
+            <span style={{fontSize:"28px"}}>{d.icon}</span>
+            <div>
+              <div style={{fontSize:"14px",fontWeight:"700",letterSpacing:".08em"}}>{d.name}</div>
+              <div style={{fontSize:"10px",color:"rgba(255,255,255,.5)",marginTop:"3px",fontWeight:"400",fontFamily:"serif"}}>{d.desc}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+      {error&&<div style={{color:"#ff8888",fontSize:"12px"}}>{error}</div>}
     </div>
   );
 }
