@@ -360,7 +360,7 @@ export default function App() {
   if (!gs||!me||!opp) return <div style={{color:"#fff",display:"flex",height:"100vh",alignItems:"center",justifyContent:"center",fontFamily:"serif",fontSize:"18px"}}>🔮 Conectando...</div>;
 
   return (
-    <div style={{fontFamily:"'Cinzel',serif",background:"#060809",minHeight:"100vh",color:"#e8d5a3",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
+    <div style={{fontFamily:"'Cinzel',serif",background:"#060809",height:"100vh",maxHeight:"100vh",color:"#e8d5a3",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital@1&display=swap');
         *{box-sizing:border-box;}
@@ -397,31 +397,31 @@ export default function App() {
       )}
 
       {/* ── OPPONENT ── */}
-      <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"8px 16px",flexShrink:0}}>
+      <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"6px 16px",flexShrink:0,overflow:"hidden"}}>
         <PBar player={opp} active={!isMy} />
-        <div style={{display:"flex",gap:"4px",marginBottom:"5px",justifyContent:"flex-end"}}>
-          {opp.hand.map((_,i)=><div key={i} style={{width:"44px",height:"62px",borderRadius:"7px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
+        <div style={{display:"flex",gap:"4px",marginBottom:"4px",justifyContent:"flex-end"}}>
+          {opp.hand.map((_,i)=><div key={i} style={{width:"36px",height:"50px",borderRadius:"6px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
         </div>
-        <div style={{display:"flex",gap:"6px",flexWrap:"wrap",minHeight:"90px",alignItems:"center"}}>
+        <div style={{display:"flex",gap:"5px",flexWrap:"wrap",minHeight:"70px",maxHeight:"90px",overflow:"hidden",alignItems:"center"}}>
           {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{}} onHov={setHoveredDelayed}/>)}
-          {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"80px",background:"#0e1d2e",flexShrink:0}}/>}
+          {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"70px",background:"#0e1d2e",flexShrink:0}}/>}
           {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"} onClick={()=>clickCreature(c,true)} onHov={setHoveredDelayed}/>)}
         </div>
       </div>
 
       {/* ── CENTER ── */}
-      <div style={{flex:1,display:"flex",gap:"10px",padding:"8px 16px",background:"radial-gradient(ellipse at center,#08130a,#030604)",borderTop:"1px solid #0c1a0e",borderBottom:"1px solid #0c1a0e",minHeight:"130px",alignItems:"stretch"}}>
+      <div style={{flex:1,display:"flex",gap:"10px",padding:"6px 16px",background:"radial-gradient(ellipse at center,#08130a,#030604)",borderTop:"1px solid #0c1a0e",borderBottom:"1px solid #0c1a0e",minHeight:0,overflow:"hidden",alignItems:"stretch"}}>
         {/* My creatures */}
-        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:"8px",alignItems:"center",justifyContent:"center"}}>
+        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:"6px",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
           {me.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="my"} onClick={()=>clickCreature(c,false)} onHov={setHoveredDelayed}/>)}
         </div>
         {/* Panel */}
-        <div style={{width:"245px",flexShrink:0,display:"flex",flexDirection:"column",gap:"7px",justifyContent:"center"}}>
+        <div style={{width:"235px",flexShrink:0,display:"flex",flexDirection:"column",gap:"5px",justifyContent:"center",overflow:"hidden"}}>
           <Steps step={step} turn={gs.turn} tn={gs.turnNumber} mi={myIndex}/>
           <Mana pool={me.manaPool}/>
-          {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"5px",padding:"5px 9px",fontSize:"11px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
-          {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"5px",padding:"5px 9px",fontSize:"11px",color:"#70c050",textAlign:"center",animation:"pulse 1s infinite"}}>🎯 Clique no alvo {targetMode==="opp"?"inimigo":"aliado"}<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{marginLeft:"6px",background:"none",border:"none",color:"#ff8888",cursor:"pointer",fontSize:"12px"}}>✕</button></div>}
-          <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
+          {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"5px",padding:"4px 8px",fontSize:"10px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
+          {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"5px",padding:"4px 8px",fontSize:"10px",color:"#70c050",textAlign:"center",animation:"pulse 1s infinite"}}>🎯 Clique no alvo {targetMode==="opp"?"inimigo":"aliado"}<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{marginLeft:"6px",background:"none",border:"none",color:"#ff8888",cursor:"pointer",fontSize:"12px"}}>✕</button></div>}
+          <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
             {isMy&&!cp&&<>
               {step==="untap"&&<>
                 <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Suas permanentes desviram automaticamente.</div>
@@ -460,25 +460,25 @@ export default function App() {
           </div>
         </div>
         {/* Log */}
-        <div ref={logRef} style={{width:"196px",flexShrink:0,overflowY:"auto",background:"rgba(0,0,0,.8)",border:"1px solid #121a22",borderRadius:"6px",padding:"8px",fontSize:"10px",lineHeight:"1.75"}}>
-          {(gs.log||[]).map((l,i)=><div key={l.id||i} style={{color:logColor(l.type),marginBottom:"1px"}}>{l.msg}</div>)}
+        <div ref={logRef} style={{width:"180px",flexShrink:0,overflowY:"auto",overflowX:"hidden",background:"rgba(0,0,0,.8)",border:"1px solid #121a22",borderRadius:"6px",padding:"6px 8px",fontSize:"9px",lineHeight:"1.7",alignSelf:"stretch"}}>
+          {(gs.log||[]).map((l,i)=><div key={l.id||i} style={{color:logColor(l.type),marginBottom:"1px",wordBreak:"break-word"}}>{l.msg}</div>)}
         </div>
       </div>
 
       {/* ── MY LANDS ── */}
-      <div style={{background:"linear-gradient(0deg,#070e1c,#0b1626)",borderTop:"2px solid #0c1b2e",padding:"6px 16px",flexShrink:0}}>
-        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"wrap"}}>
+      <div style={{background:"linear-gradient(0deg,#070e1c,#0b1626)",borderTop:"2px solid #0c1b2e",padding:"4px 16px",flexShrink:0}}>
+        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"nowrap",overflow:"hidden"}}>
           <PBar player={me} active={isMy} compact/>
-          <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginLeft:"10px"}}>
+          <div style={{display:"flex",gap:"4px",flexWrap:"nowrap",marginLeft:"8px",overflowX:"auto",flex:1}}>
             {me.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{if(isMy)emit("tap_land",{cardUid:c.uid});}} onHov={setHoveredDelayed}/>)}
           </div>
-          <div style={{marginLeft:"auto",fontSize:"10px",color:"#2a3a4a"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0} {me.hand?.length>7&&<span style={{color:"#ff8888",fontWeight:"bold"}}>✋{me.hand.length}/7!</span>}</div>
+          <div style={{flexShrink:0,fontSize:"10px",color:"#2a3a4a"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0} {me.hand?.length>7&&<span style={{color:"#ff8888",fontWeight:"bold"}}>✋{me.hand.length}/7!</span>}</div>
         </div>
       </div>
 
       {/* ── HAND ── */}
-      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"10px 16px",minHeight:"165px",flexShrink:0}} onMouseLeave={()=>setHoveredDelayed(null)}>
-        <div style={{display:"flex",gap:"8px",overflowX:"auto",paddingBottom:"8px",alignItems:"flex-end"}}>
+      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"8px 16px",height:"150px",flexShrink:0,overflow:"hidden"}} onMouseLeave={()=>setHoveredDelayed(null)}>
+        <div style={{display:"flex",gap:"6px",overflowX:"auto",height:"100%",alignItems:"flex-end",paddingBottom:"6px"}}>
           {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed}/>)}
           {me.hand.length===0&&<div style={{color:"#151008",fontSize:"13px",margin:"auto",fontStyle:"italic"}}>Sem cartas na mão</div>}
         </div>
