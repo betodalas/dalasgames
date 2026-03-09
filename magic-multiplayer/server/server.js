@@ -337,9 +337,445 @@ const resolveCombat = (room) => {
   checkWinner(room);
 };
 
-// ─── SOCKET EVENTS ──────────────────────────────────────────
+// ─── BOT AI SYSTEM ───────────────────────────────────────────
+
+// Avalia o "valor" de uma carta para o bot
+const cardValue = (card) => {
+  if (!card) return 0;
+  if (card.type === "creature") {
+    const base = (card.power || 0) + (card.toughness || 0);
+    const abilityBonus = (card.abilities || []).reduce((s, a) => s + ({flying:2,trample:1,haste:2,vigilance:1,first_strike:1,tap_mana:1}[a]||0), 0);
+    return base + abilityBonus;
+  }
+  if (card.effect === "destroy_all_creatures") return 8;
+  if (card.effect === "exile_creature") return 5;
+  if (card.effect === "destroy_creature") return 4;
+  if (card.effect === "deal_4_damage") return 4;
+  if (card.effect === "deal_3_damage") return 3;
+  if (card.effect === "draw_3") return 4;
+  if (card.effect === "pump_creature") return 2;
+  if (card.effect === "add_3_black_mana") return 2;
+  return 1;
+};
+
+// Avalia o estado do jogo para o bot (positivo = vantagem do bot)
+const evaluateBoard = (room, botIdx) => {
+  const playerIdx = 1 - botIdx;
+  let score = 0;
+  // Diferença de vida
+  score += (room.players[botIdx].life - room.players[playerIdx].life) * 2;
+  // Valor das criaturas em campo
+  room.players[botIdx].battlefield.filter(c=>c.type==="creature").forEach(c => score += cardValue(c));
+  room.players[playerIdx].battlefield.filter(c=>c.type==="creature").forEach(c => score -= cardValue(c));
+  // Cartas na mão
+  score += room.players[botIdx].hand.length * 0.5;
+  score -= room.players[playerIdx].hand.length * 0.5;
+  return score;
+};
+
+// Verifica se o bot pode pagar o custo
+const botCanAfford = (card, pool) => canAfford(card, pool);
+
+// Bot toca todas as terras disponíveis para gerar mana
+const botTapAllLands = (room, botIdx) => {
+  const bot = room.players[botIdx];
+  bot.battlefield.filter(c => c.type === "land" && !c.tapped).forEach(land => {
+    bot.battlefield = bot.battlefield.map(c => c.uid === land.uid ? { ...c, tapped: true } : c);
+    if (land.produces) land.produces.forEach(m => { bot.manaPool[m] = (bot.manaPool[m] || 0) + 1; });
+  });
+  // Tap criaturas com tap_mana (Llanowar Elves)
+  bot.battlefield.filter(c => c.type === "creature" && !c.tapped && !c.summoningSick && (c.abilities||[]).includes("tap_mana")).forEach(creature => {
+    bot.battlefield = bot.battlefield.map(c => c.uid === creature.uid ? { ...c, tapped: true } : c);
+    bot.manaPool.G = (bot.manaPool.G || 0) + 1;
+    addLog(room, `🧝 ${bot.name} toca ${creature.name} → +1 mana verde`, "mana");
+  });
+};
+
+// Bot joga uma terra da mão se tiver
+const botPlayLand = (room, botIdx) => {
+  const bot = room.players[botIdx];
+  if (bot.landsPlayedThisTurn >= 1) return;
+  const land = bot.hand.find(c => c.type === "land");
+  if (!land) return;
+  bot.hand = bot.hand.filter(c => c.uid !== land.uid);
+  const newLand = { ...land, uid: mkuid(), tapped: false };
+  bot.battlefield.push(newLand);
+  bot.landsPlayedThisTurn++;
+  bot.maxMana++;
+  addLog(room, `🏔️ ${bot.name} joga ${land.name}`, "play");
+};
+
+// Bot escolhe a melhor carta para jogar baseado na dificuldade
+const botChooseSpell = (room, botIdx, difficulty) => {
+  const bot = room.players[botIdx];
+  const oppIdx = 1 - botIdx;
+  const playable = bot.hand.filter(c => c.type !== "land" && botCanAfford(c, bot.manaPool));
+  if (playable.length === 0) return null;
+
+  if (difficulty === "random") return playable[Math.floor(Math.random() * playable.length)];
+
+  if (difficulty === "basic") {
+    // Prefere criaturas, depois dano direto
+    return playable.sort((a,b) => cardValue(b) - cardValue(a))[0];
+  }
+
+  if (difficulty === "medium" || difficulty === "hard") {
+    const oppCreatures = room.players[oppIdx].battlefield.filter(c => c.type === "creature");
+    const myCreatures = bot.battlefield.filter(c => c.type === "creature");
+
+    // Prioridade hard: remover ameaças > criar criaturas > dano direto
+    if (difficulty === "hard") {
+      // Se oponente tem criaturas voadoras poderosas, usa remoção
+      const threats = oppCreatures.filter(c => cardValue(c) >= 6);
+      if (threats.length > 0) {
+        const removal = playable.find(c => ["destroy_creature","exile_creature","destroy_all_creatures"].includes(c.effect));
+        if (removal) return removal;
+      }
+      // Se pode matar o oponente com dano direto, faz isso
+      const dmgSpells = playable.filter(c => ["deal_3_damage","deal_4_damage"].includes(c.effect));
+      const totalDmg = dmgSpells.reduce((s,c) => s + (c.effect==="deal_3_damage"?3:4), 0);
+      if (totalDmg >= room.players[oppIdx].life) return dmgSpells[0];
+      // Se vida baixa, cura com pump ou usa remoção
+      if (room.players[botIdx].life <= 8) {
+        const removal = playable.find(c => ["destroy_all_creatures","destroy_creature","exile_creature"].includes(c.effect));
+        if (removal) return removal;
+      }
+    }
+    // Geral medium/hard: maior valor
+    return playable.sort((a,b) => cardValue(b) - cardValue(a))[0];
+  }
+  return playable[0];
+};
+
+// Bot escolhe atacantes
+const botChooseAttackers = (room, botIdx, difficulty) => {
+  const bot = room.players[botIdx];
+  const oppIdx = 1 - botIdx;
+  const eligible = bot.battlefield.filter(c => c.type === "creature" && !c.tapped && !c.summoningSick);
+  if (eligible.length === 0) return [];
+
+  if (difficulty === "random") {
+    return eligible.filter(() => Math.random() > 0.4).map(c => c.uid);
+  }
+
+  if (difficulty === "basic") {
+    // Ataca com tudo se tiver vantagem ou vida do oponente for baixa
+    const myPower = eligible.reduce((s,c) => s + (c.power||0), 0);
+    if (myPower > 0) return eligible.map(c => c.uid);
+    return [];
+  }
+
+  if (difficulty === "medium" || difficulty === "hard") {
+    const oppCreatures = room.players[oppIdx].battlefield.filter(c => c.type === "creature" && !c.tapped);
+    const oppLife = room.players[oppIdx].life;
+
+    // Hard: calcula se ataque causa dano letal
+    if (difficulty === "hard") {
+      const totalPower = eligible.reduce((s,c) => s + (c.power||0), 0);
+      if (totalPower >= oppLife) return eligible.map(c => c.uid); // ataque letal!
+    }
+
+    // Ataca com criaturas que têm vantagem sobre bloqueadores
+    if (oppCreatures.length === 0) return eligible.map(c => c.uid); // sem bloqueadores, ataca tudo
+
+    // Ataca com criaturas que sobrevivem ao bloqueio ou têm flying
+    return eligible.filter(atk => {
+      if ((atk.abilities||[]).includes("flying")) {
+        // Voa — só bloqueia se oponente tiver voador
+        const canBeBlocked = oppCreatures.some(b => (b.abilities||[]).includes("flying"));
+        return !canBeBlocked || atk.power > 0;
+      }
+      // Terrestre — ataca se tiver poder suficiente
+      const worstBlocker = oppCreatures.sort((a,b) => (b.power||0)-(a.power||0))[0];
+      if (!worstBlocker) return true;
+      // Ataca se mata o bloqueador sem morrer (ou tem trample)
+      const survives = (atk.toughness||0) > (worstBlocker.power||0);
+      const killsBlocker = (atk.power||0) >= (worstBlocker.toughness||0);
+      const hasTramp = (atk.abilities||[]).includes("trample");
+      return survives || killsBlocker || hasTramp;
+    }).map(c => c.uid);
+  }
+  return [];
+};
+
+// Bot escolhe bloqueadores
+const botChooseBlockers = (room, botIdx, difficulty) => {
+  const bot = room.players[botIdx];
+  const attackers = room.attackers.map(uid => {
+    const atkIdx = 1 - botIdx;
+    return room.players[atkIdx].battlefield.find(c => c.uid === uid);
+  }).filter(Boolean);
+
+  const myCreatures = bot.battlefield.filter(c => c.type === "creature" && !c.tapped);
+  const blockers = {};
+
+  if (difficulty === "random") {
+    attackers.forEach(atk => {
+      const blocker = myCreatures[Math.floor(Math.random() * myCreatures.length)];
+      if (blocker && Math.random() > 0.5) blockers[atk.uid] = blocker.uid;
+    });
+    return blockers;
+  }
+
+  if (difficulty === "basic") {
+    // Bloqueia o atacante mais forte com o bloqueador mais forte
+    const sortedAtk = [...attackers].sort((a,b) => (b.power||0)-(a.power||0));
+    const sortedBlk = [...myCreatures].sort((a,b) => (b.power||0)-(a.power||0));
+    sortedAtk.forEach((atk, i) => { if (sortedBlk[i]) blockers[atk.uid] = sortedBlk[i].uid; });
+    return blockers;
+  }
+
+  if (difficulty === "medium" || difficulty === "hard") {
+    const usedBlockers = new Set();
+    // Ordena atacantes por ameaça (maior dano primeiro)
+    const sortedAtk = [...attackers].sort((a,b) => (b.power||0)-(a.power||0));
+
+    sortedAtk.forEach(atk => {
+      // Encontra o melhor bloqueador para este atacante
+      const best = myCreatures
+        .filter(b => !usedBlockers.has(b.uid))
+        .filter(b => {
+          if ((atk.abilities||[]).includes("flying")) return (b.abilities||[]).includes("flying");
+          return true;
+        })
+        .sort((a,b) => {
+          // Prefere bloqueador que: mata o atacante E sobrevive
+          const aKills = (a.power||0) >= (atk.toughness||0);
+          const bKills = (b.power||0) >= (atk.toughness||0);
+          const aSurv = (a.toughness||0) > (atk.power||0);
+          const bSurv = (b.toughness||0) > (atk.power||0);
+          const aScore = (aKills?2:0) + (aSurv?1:0);
+          const bScore = (bKills?2:0) + (bSurv?1:0);
+          return bScore - aScore;
+        })[0];
+
+      if (best) {
+        // Hard: só bloqueia se vale a pena
+        if (difficulty === "hard") {
+          const kills = (best.power||0) >= (atk.toughness||0);
+          const survives = (best.toughness||0) > (atk.power||0);
+          const atkDmgSignificant = (atk.power||0) >= 3;
+          if (kills || survives || atkDmgSignificant) {
+            blockers[atk.uid] = best.uid;
+            usedBlockers.add(best.uid);
+          }
+        } else {
+          blockers[atk.uid] = best.uid;
+          usedBlockers.add(best.uid);
+        }
+      }
+    });
+    return blockers;
+  }
+  return {};
+};
+
+// Executa o turno completo do bot com delay para parecer humano
+const runBotTurn = (room, botIdx, difficulty) => {
+  if (room.winner !== null) return;
+  const delay = { random:300, basic:600, medium:900, hard:1200 }[difficulty] || 800;
+
+  const step = (fn, ms) => new Promise(r => setTimeout(() => { fn(); r(); }, ms));
+
+  const doTurn = async () => {
+    if (!rooms[room.code] || room.winner !== null) return;
+
+    // UNTAP
+    room.players[botIdx] = untapAll(room.players[botIdx]);
+    addLog(room, `🔄 Turno ${room.turnNumber} — ${room.players[botIdx].name} (🤖)`, "system");
+    broadcastRoom(room);
+    await step(()=>{}, delay);
+
+    // UPKEEP
+    addLog(room, `⬆️ Manutenção do bot`, "info");
+    broadcastRoom(room);
+    await step(()=>{}, delay/2);
+
+    // DRAW
+    if (room.turnNumber > 1) {
+      room.players[botIdx] = drawCards(room.players[botIdx], 1);
+      addLog(room, `📖 ${room.players[botIdx].name} compra uma carta`, "draw");
+      broadcastRoom(room);
+    }
+    await step(()=>{}, delay);
+
+    // MAIN1 — toca terras, convoca criaturas, lança feitiços
+    botTapAllLands(room, botIdx);
+    botPlayLand(room, botIdx);
+    botTapAllLands(room, botIdx); // retoca após jogar terra
+    broadcastRoom(room);
+    await step(()=>{}, delay);
+
+    // Lança feitiços/criaturas
+    let spellsCast = 0;
+    const maxSpells = difficulty === "hard" ? 5 : difficulty === "medium" ? 3 : 2;
+    while (spellsCast < maxSpells) {
+      const card = botChooseSpell(room, botIdx, difficulty);
+      if (!card) break;
+      const bot = room.players[botIdx];
+      bot.manaPool = payMana(card.cost || {}, bot.manaPool);
+      bot.hand = bot.hand.filter(c => c.uid !== card.uid);
+      if (card.type === "creature") {
+        bot.battlefield.push({ ...card, uid: mkuid(), tapped: false, summoningSick: true, damage: 0 });
+        addLog(room, `🐉 ${bot.name} convoca ${card.name} (${card.power}/${card.toughness})`, "play");
+      } else {
+        // Escolhe alvo para feitiços
+        const oppIdx = 1 - botIdx;
+        let targetUid = null;
+        if (["destroy_creature","exile_creature","deal_3_damage","deal_4_damage"].includes(card.effect)) {
+          const targets = room.players[oppIdx].battlefield.filter(c => c.type === "creature");
+          if (targets.length > 0) {
+            targetUid = targets.sort((a,b) => cardValue(b)-cardValue(a))[0].uid;
+          }
+        }
+        if (["pump_creature"].includes(card.effect)) {
+          const myCreatures = bot.battlefield.filter(c => c.type === "creature");
+          if (myCreatures.length > 0) targetUid = myCreatures.sort((a,b) => cardValue(b)-cardValue(a))[0].uid;
+        }
+        bot.graveyard.push(card);
+        addLog(room, `🪄 ${bot.name} lança ${card.name}`, "spell");
+        resolveEffect(room, card, botIdx, targetUid);
+      }
+      checkWinner(room);
+      broadcastRoom(room);
+      if (room.winner !== null) return;
+      spellsCast++;
+      await step(()=>{}, delay);
+      botTapAllLands(room, botIdx); // toca mais terras se precisar
+    }
+
+    // COMBAT
+    addLog(room, `⚔️ Fase de combate do bot`, "info");
+    room.combatPhase = "declare_attackers";
+    room.attackers = [];
+    broadcastRoom(room);
+    await step(()=>{}, delay);
+
+    const attackerUids = botChooseAttackers(room, botIdx, difficulty);
+    room.attackers = attackerUids;
+    room.players[botIdx].battlefield = room.players[botIdx].battlefield.map(c =>
+      attackerUids.includes(c.uid) ? { ...c, tapped: true } : c
+    );
+
+    if (attackerUids.length === 0) {
+      addLog(room, `🛡️ ${room.players[botIdx].name} não ataca`, "info");
+      room.combatPhase = null;
+    } else {
+      addLog(room, `⚔️ ${room.players[botIdx].name} ataca com ${attackerUids.length} criatura(s)!`, "combat");
+      room.combatPhase = "declare_blockers";
+      broadcastRoom(room);
+      // Jogador humano tem tempo para bloquear
+      await step(()=>{}, delay * 3);
+
+      // Se humano não bloqueou, bot resolve
+      if (rooms[room.code] && room.combatPhase === "declare_blockers") {
+        addLog(room, `🛡️ Bloqueio confirmado`, "combat");
+        resolveCombat(room);
+        checkWinner(room);
+        if (room.winner !== null) { broadcastRoom(room); return; }
+      }
+    }
+    broadcastRoom(room);
+    await step(()=>{}, delay);
+
+    // MAIN2
+    botTapAllLands(room, botIdx);
+    const card2 = botChooseSpell(room, botIdx, difficulty);
+    if (card2) {
+      const bot = room.players[botIdx];
+      bot.manaPool = payMana(card2.cost || {}, bot.manaPool);
+      bot.hand = bot.hand.filter(c => c.uid !== card2.uid);
+      if (card2.type === "creature") {
+        bot.battlefield.push({ ...card2, uid: mkuid(), tapped: false, summoningSick: true, damage: 0 });
+        addLog(room, `🐉 ${bot.name} convoca ${card2.name}`, "play");
+      } else {
+        bot.graveyard.push(card2);
+        addLog(room, `🪄 ${bot.name} lança ${card2.name}`, "spell");
+        resolveEffect(room, card2, botIdx, null);
+      }
+      checkWinner(room);
+      broadcastRoom(room);
+      if (room.winner !== null) return;
+      await step(()=>{}, delay);
+    }
+
+    // END
+    const ap = room.players[botIdx];
+    if (ap.hand.length > 7) {
+      const excess = ap.hand.length - 7;
+      ap.graveyard.push(...ap.hand.splice(7, excess));
+      addLog(room, `✋ ${ap.name} descartou ${excess} carta(s)`, "info");
+    }
+
+    // Passa turno para o humano
+    room.turn = 1 - botIdx;
+    room.step = "untap";
+    room.combatPhase = null;
+    room.attackers = [];
+    room.blockers = {};
+    if (room.turn === 0) room.turnNumber++;
+    room.players[room.turn] = untapAll(room.players[room.turn]);
+    if (room.turnNumber > 1) {
+      room.players[room.turn] = drawCards(room.players[room.turn], 1);
+      addLog(room, `📖 ${room.players[room.turn].name} compra uma carta`, "draw");
+    }
+    room.step = "upkeep";
+    addLog(room, `🔄 Turno ${room.turnNumber} — ${room.players[room.turn].name}`, "system");
+    broadcastRoom(room);
+  };
+
+  doTurn().catch(e => console.error("Bot error:", e));
+};
+
+
 io.on("connection", (socket) => {
   console.log("Connected:", socket.id);
+
+  // ── Create VS Bot ──
+  socket.on("create_vs_bot", ({ name, colors, difficulty }) => {
+    const code = genCode();
+    const room = mkRoom(code);
+    room.isBot = true;
+    room.botDifficulty = difficulty || "medium";
+    room.botIdx = 1;
+    rooms[code] = room;
+
+    const botColors = ["R","G","B","W","U"].sort(()=>Math.random()-.5).slice(0,2);
+    const botNames = { random:"Mago Aleatório 🎲", basic:"Aprendiz Arcano 📚", medium:"Feiticeiro Sombrio 🌑", hard:"Arquimago Supremo 💀" };
+    const botName = botNames[difficulty] || "Mago Bot";
+
+    room.players[0] = mkPlayer(socket.id, name, colors);
+    room.players[1] = mkPlayer("BOT", botName, botColors);
+    room.sockets = [socket.id, "BOT"];
+
+    socket.join(code);
+    socket.data.roomCode = code;
+    socket.data.playerIndex = 0;
+
+    room.step = "upkeep";
+    room.turn = 0;
+    room.turnNumber = 1;
+    addLog(room, `⚔️ ${name} vs ${botName} — Que a batalha comece!`, "system");
+    room.players[0] = drawCards(room.players[0], 1);
+    addLog(room, `📖 ${name} compra uma carta`, "draw");
+    broadcastRoom(room);
+    console.log(`Bot room ${code}: ${name} vs ${botName} (${difficulty})`);
+  });
+
+  // ── Declare Blockers (vs Bot — bot resolve automaticamente após humano bloquear) ──
+  socket.on("declare_blockers_human", () => {
+    const code = socket.data.roomCode;
+    const room = rooms[code];
+    if (!room || !room.isBot || room.combatPhase !== "declare_blockers") return;
+    const humanIdx = socket.data.playerIndex;
+    addLog(room, `🛡️ ${room.players[humanIdx].name} declara bloqueadores`, "combat");
+    resolveCombat(room);
+    checkWinner(room);
+    broadcastRoom(room);
+    if (room.winner !== null) return;
+    // Continua o turno do bot após bloqueio
+    room.combatPhase = null;
+  });
 
   // ── Rejoin Room (reconexão após reload) ──
   socket.on("rejoin_room", ({ code, name }) => {
@@ -500,13 +936,16 @@ socket.on("create_room", ({ name, colors }) => {
     const idx = socket.data.playerIndex;
     const room = rooms[code];
     if (!room || room.turn !== idx) return;
-    // Avança fases até chegar no "end"
     let safety = 0;
-    while (room.step !== "end" && safety++ < 10) {
-      advanceStep(room);
-    }
+    while (room.step !== "end" && safety++ < 10) advanceStep(room);
     addLog(room, `⏭️ ${room.players[idx].name} passou o turno`, "info");
+    // Passa para o próximo turno
+    advanceStep(room); // end -> untap próximo jogador
     broadcastRoom(room);
+    // Se virou turno do bot, inicia IA
+    if (room.isBot && room.turn === room.botIdx) {
+      setTimeout(() => runBotTurn(room, room.botIdx, room.botDifficulty), 800);
+    }
   });
 
   // ── Advance Step ──
@@ -517,6 +956,10 @@ socket.on("create_room", ({ name, colors }) => {
     if (!room || room.turn !== idx || room.step === "waiting") return;
     advanceStep(room);
     broadcastRoom(room);
+    // Se virou turno do bot, inicia IA
+    if (room.isBot && room.turn === room.botIdx && room.step === "upkeep") {
+      setTimeout(() => runBotTurn(room, room.botIdx, room.botDifficulty), 800);
+    }
   });
 
   // ── Draw Card (draw step) ──
