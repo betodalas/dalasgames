@@ -397,90 +397,90 @@ export default function App() {
       )}
 
       {/* ── OPPONENT ── */}
-      <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"6px 16px",flexShrink:0,overflow:"hidden"}}>
+      <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"4px 16px",flexShrink:0}}>
         <PBar player={opp} active={!isMy} />
-        <div style={{display:"flex",gap:"4px",marginBottom:"4px",justifyContent:"flex-end"}}>
-          {opp.hand.map((_,i)=><div key={i} style={{width:"36px",height:"50px",borderRadius:"6px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
+        <div style={{display:"flex",gap:"3px",marginBottom:"3px",justifyContent:"flex-end"}}>
+          {opp.hand.map((_,i)=><div key={i} style={{width:"30px",height:"42px",borderRadius:"5px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
         </div>
-        <div style={{display:"flex",gap:"5px",flexWrap:"wrap",minHeight:"70px",maxHeight:"90px",overflow:"hidden",alignItems:"center"}}>
-          {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{}} onHov={setHoveredDelayed}/>)}
-          {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"70px",background:"#0e1d2e",flexShrink:0}}/>}
-          {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"} onClick={()=>clickCreature(c,true)} onHov={setHoveredDelayed}/>)}
+        <div style={{display:"flex",gap:"4px",flexWrap:"nowrap",overflowX:"auto",minHeight:"68px",alignItems:"center",paddingBottom:"2px"}}>
+          {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{}} onHov={setHoveredDelayed} small/>)}
+          {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"60px",background:"#0e1d2e",flexShrink:0}}/>}
+          {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"} onClick={()=>clickCreature(c,true)} onHov={setHoveredDelayed} small/>)}
         </div>
       </div>
 
       {/* ── CENTER ── */}
-      <div style={{flex:1,display:"flex",gap:"10px",padding:"6px 16px",background:"radial-gradient(ellipse at center,#08130a,#030604)",borderTop:"1px solid #0c1a0e",borderBottom:"1px solid #0c1a0e",minHeight:0,overflow:"hidden",alignItems:"stretch"}}>
+      <div style={{flex:1,display:"flex",gap:"8px",padding:"4px 16px",background:"radial-gradient(ellipse at center,#08130a,#030604)",borderTop:"1px solid #0c1a0e",borderBottom:"1px solid #0c1a0e",minHeight:0,overflow:"hidden",alignItems:"stretch"}}>
         {/* My creatures */}
-        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:"6px",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:"6px",alignItems:"center",justifyContent:"center",overflowY:"auto"}}>
           {me.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="my"} onClick={()=>clickCreature(c,false)} onHov={setHoveredDelayed}/>)}
         </div>
         {/* Panel */}
-        <div style={{width:"235px",flexShrink:0,display:"flex",flexDirection:"column",gap:"5px",justifyContent:"center",overflow:"hidden"}}>
+        <div style={{width:"225px",flexShrink:0,display:"flex",flexDirection:"column",gap:"4px",justifyContent:"center",overflowY:"auto"}}>
           <Steps step={step} turn={gs.turn} tn={gs.turnNumber} mi={myIndex}/>
           <Mana pool={me.manaPool}/>
-          {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"5px",padding:"4px 8px",fontSize:"10px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
-          {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"5px",padding:"4px 8px",fontSize:"10px",color:"#70c050",textAlign:"center",animation:"pulse 1s infinite"}}>🎯 Clique no alvo {targetMode==="opp"?"inimigo":"aliado"}<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{marginLeft:"6px",background:"none",border:"none",color:"#ff8888",cursor:"pointer",fontSize:"12px"}}>✕</button></div>}
-          <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+          {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"5px",padding:"3px 7px",fontSize:"10px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
+          {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"5px",padding:"3px 7px",fontSize:"10px",color:"#70c050",textAlign:"center",animation:"pulse 1s infinite"}}>🎯 Clique no alvo {targetMode==="opp"?"inimigo":"aliado"}<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{marginLeft:"6px",background:"none",border:"none",color:"#ff8888",cursor:"pointer",fontSize:"11px"}}>✕</button></div>}
+          <div style={{display:"flex",flexDirection:"column",gap:"3px"}}>
             {isMy&&!cp&&<>
               {step==="untap"&&<>
-                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Suas permanentes desviram automaticamente.</div>
+                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Suas permanentes desviram automaticamente.</div>
                 <button style={btn("#74b9ff","#030c18",true)} onClick={()=>emit("advance_step")}>🔄 Confirmar Desvirar</button>
               </>}
               {step==="upkeep"&&<>
-                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Efeitos do início do turno. Clique para continuar.</div>
+                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Efeitos do início do turno. Clique para continuar.</div>
                 <button style={btn("#a29bfe","#080318",true)} onClick={()=>emit("advance_step")}>⬆️ Confirmar Manutenção</button>
               </>}
               {step==="draw"&&<>
-                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Compre uma carta do seu deck.</div>
+                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Compre uma carta do seu deck.</div>
                 <button style={btn("#55efc4","#031208",true)} onClick={()=>emit("draw_card")}>📖 Comprar Carta</button>
               </>}
               {step==="main1"&&<>
-                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Jogue terrenos, invoque criaturas e lance feitiços.</div>
+                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Jogue terrenos, invoque criaturas e lance feitiços.</div>
                 <button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>⚔️ Ir para Combate</button>
                 <button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar Turno (sem atacar)</button>
               </>}
               {step==="main2"&&<>
-                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Fase pós-combate. Lance mais feitiços se quiser.</div>
+                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Fase pós-combate. Lance mais feitiços se quiser.</div>
                 <button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>🌙 Ir para Fim de Turno</button>
                 <button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar Turno</button>
               </>}
               {step==="end"&&<>
-                <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"3px 0"}}>Fim do turno. Passa para o oponente.</div>
+                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Fim do turno. Passa para o oponente.</div>
                 <button style={btn("#636e72","#0a0b0c",true)} onClick={()=>emit("advance_step")}>→ Passar para o Oponente</button>
               </>}
             </>}
             {isMy&&cp==="declare_attackers"&&<>
-              <div style={{fontSize:"10px",color:"#4a6a8a",textAlign:"center",padding:"2px 0"}}>Clique nas suas criaturas para atacar, depois confirme. Ou pule.</div>
-              <div style={{fontSize:"11px",color:"#e17055",textAlign:"center",background:"rgba(80,20,0,.5)",border:"1px solid #e17055",borderRadius:"5px",padding:"4px 8px"}}>{atks.length>0?`⚔️ ${atks.length} criatura(s) pronta(s)`:"🛡️ Nenhuma selecionada"}</div>
+              <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Clique nas suas criaturas para atacar, depois confirme.</div>
+              <div style={{fontSize:"10px",color:"#e17055",textAlign:"center",background:"rgba(80,20,0,.5)",border:"1px solid #e17055",borderRadius:"5px",padding:"3px 7px"}}>{atks.length>0?`⚔️ ${atks.length} criatura(s) pronta(s)`:"🛡️ Nenhuma selecionada"}</div>
               <button style={{...btn("#e17055","#150601",true),animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️ {atks.length>0?`Atacar com ${atks.length}`:"Pular Ataque"}</button>
             </>}
             {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️ Confirmar Bloqueio</button>}
-            {!isMy&&!cp&&<div style={{fontSize:"11px",color:"#2a4a6a",fontStyle:"italic",textAlign:"center",animation:"pulse 2s infinite"}}>⏳ Aguardando oponente...</div>}
+            {!isMy&&!cp&&<div style={{fontSize:"10px",color:"#2a4a6a",fontStyle:"italic",textAlign:"center",animation:"pulse 2s infinite"}}>⏳ Aguardando oponente...</div>}
           </div>
         </div>
         {/* Log */}
-        <div ref={logRef} style={{width:"180px",flexShrink:0,overflowY:"auto",overflowX:"hidden",background:"rgba(0,0,0,.8)",border:"1px solid #121a22",borderRadius:"6px",padding:"6px 8px",fontSize:"9px",lineHeight:"1.7",alignSelf:"stretch"}}>
+        <div ref={logRef} style={{width:"170px",flexShrink:0,overflowY:"auto",overflowX:"hidden",background:"rgba(0,0,0,.8)",border:"1px solid #121a22",borderRadius:"6px",padding:"5px 7px",fontSize:"9px",lineHeight:"1.6",alignSelf:"stretch"}}>
           {(gs.log||[]).map((l,i)=><div key={l.id||i} style={{color:logColor(l.type),marginBottom:"1px",wordBreak:"break-word"}}>{l.msg}</div>)}
         </div>
       </div>
 
       {/* ── MY LANDS ── */}
-      <div style={{background:"linear-gradient(0deg,#070e1c,#0b1626)",borderTop:"2px solid #0c1b2e",padding:"4px 16px",flexShrink:0}}>
-        <div style={{display:"flex",gap:"6px",alignItems:"center",flexWrap:"nowrap",overflow:"hidden"}}>
+      <div style={{background:"linear-gradient(0deg,#070e1c,#0b1626)",borderTop:"2px solid #0c1b2e",padding:"3px 16px",flexShrink:0}}>
+        <div style={{display:"flex",gap:"5px",alignItems:"center",flexWrap:"nowrap"}}>
           <PBar player={me} active={isMy} compact/>
-          <div style={{display:"flex",gap:"4px",flexWrap:"nowrap",marginLeft:"8px",overflowX:"auto",flex:1}}>
-            {me.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{if(isMy)emit("tap_land",{cardUid:c.uid});}} onHov={setHoveredDelayed}/>)}
+          <div style={{display:"flex",gap:"3px",flexWrap:"nowrap",marginLeft:"6px",overflowX:"auto",flex:1,alignItems:"center"}}>
+            {me.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{if(isMy)emit("tap_land",{cardUid:c.uid});}} onHov={setHoveredDelayed} small/>)}
           </div>
-          <div style={{flexShrink:0,fontSize:"10px",color:"#2a3a4a"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0} {me.hand?.length>7&&<span style={{color:"#ff8888",fontWeight:"bold"}}>✋{me.hand.length}/7!</span>}</div>
+          <div style={{flexShrink:0,fontSize:"9px",color:"#2a3a4a"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0} {me.hand?.length>7&&<span style={{color:"#ff8888",fontWeight:"bold"}}>✋{me.hand.length}/7!</span>}</div>
         </div>
       </div>
 
       {/* ── HAND ── */}
-      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"8px 16px",height:"150px",flexShrink:0,overflow:"hidden"}} onMouseLeave={()=>setHoveredDelayed(null)}>
-        <div style={{display:"flex",gap:"6px",overflowX:"auto",height:"100%",alignItems:"flex-end",paddingBottom:"6px"}}>
+      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"6px 16px 8px",flexShrink:0,overflow:"hidden"}} onMouseLeave={()=>setHoveredDelayed(null)}>
+        <div style={{display:"flex",gap:"5px",overflowX:"auto",alignItems:"flex-end",paddingBottom:"4px"}}>
           {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed}/>)}
-          {me.hand.length===0&&<div style={{color:"#151008",fontSize:"13px",margin:"auto",fontStyle:"italic"}}>Sem cartas na mão</div>}
+          {me.hand.length===0&&<div style={{color:"#151008",fontSize:"12px",padding:"20px",fontStyle:"italic"}}>Sem cartas na mão</div>}
         </div>
       </div>
 
@@ -572,21 +572,23 @@ function Steps({step, turn, tn, mi}) {
 }
 
 // ── Battlefield Card ──
-function BCard({card,atk,blk,tgt,onClick,onHov}) {
+function BCard({card,atk,blk,tgt,onClick,onHov,small=false}) {
   if(card.hidden) return null;
   const st=getCardStyle(card);
+  const w = small ? 62 : 86;
+  const h = small ? 87 : 120;
   return (
     <div className="bcard" onClick={onClick}
       onMouseEnter={()=>onHov&&onHov(card)} onMouseLeave={()=>onHov&&onHov(null)}
-      style={{width:"86px",height:"120px",borderRadius:"9px",background:st.bg,border:`2px solid ${atk?"#e17055":blk?"#74b9ff":tgt?"#55efc4":st.border}`,
+      style={{width:`${w}px`,height:`${h}px`,borderRadius:"7px",background:st.bg,border:`2px solid ${atk?"#e17055":blk?"#74b9ff":tgt?"#55efc4":st.border}`,
         boxShadow:atk?"0 0 20px #e17055":blk?"0 0 20px #74b9ff":tgt?"0 0 16px #55efc4":"0 4px 14px rgba(0,0,0,.85)",
         cursor:"pointer",transform:card.tapped?"rotate(90deg)":"none",transition:"transform .3s,box-shadow .2s,border-color .2s",
         flexShrink:0,position:"relative",filter:card.summoningSick?"brightness(.55)":"none",overflow:"hidden",
         animation:atk?"atk 1.5s infinite":tgt?"tgt 1.5s infinite":"none"}}>
-      <CardImage name={card.name} style={{borderRadius:"7px"}}/>
-      {card.type==="creature"&&<div style={{position:"absolute",bottom:"3px",right:"4px",background:"rgba(0,0,0,.88)",borderRadius:"4px",padding:"1px 5px",fontSize:"11px",fontWeight:"bold",color:"#f0d48a",fontFamily:"'Cinzel',serif"}}>{card.power}/{card.toughness}</div>}
-      {card.tapped&&<div style={{position:"absolute",top:"2px",left:"2px",fontSize:"8px",background:"rgba(0,0,0,.75)",borderRadius:"3px",padding:"1px 3px"}}>🔄</div>}
-      {card.summoningSick&&<div style={{position:"absolute",top:"2px",right:"2px",fontSize:"8px",background:"rgba(0,0,0,.75)",borderRadius:"3px",padding:"1px 3px"}}>💤</div>}
+      <CardImage name={card.name} style={{borderRadius:"5px"}}/>
+      {card.type==="creature"&&<div style={{position:"absolute",bottom:"2px",right:"3px",background:"rgba(0,0,0,.88)",borderRadius:"3px",padding:"1px 4px",fontSize:small?"9px":"11px",fontWeight:"bold",color:"#f0d48a",fontFamily:"'Cinzel',serif"}}>{card.power}/{card.toughness}</div>}
+      {card.tapped&&<div style={{position:"absolute",top:"2px",left:"2px",fontSize:"7px",background:"rgba(0,0,0,.75)",borderRadius:"3px",padding:"1px 3px"}}>🔄</div>}
+      {card.summoningSick&&<div style={{position:"absolute",top:"2px",right:"2px",fontSize:"7px",background:"rgba(0,0,0,.75)",borderRadius:"3px",padding:"1px 3px"}}>💤</div>}
     </div>
   );
 }
