@@ -1,0 +1,27 @@
+{
+  "short_name": "Dalas Games",
+  "name": "Dalas Games — Card Battle",
+  "description": "Jogo de cartas multiplayer online",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#060809",
+  "theme_color": "#c9a84c",
+  "categories": ["games"],
+  "lang": "pt-BR"
+}
