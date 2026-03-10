@@ -14,31 +14,37 @@ const io = new Server(server, {
 
 // ─── CARD DATABASE ────────────────────────────────────────────
 const CARD_DB = [
-  { id:"w1", name:"Serra Angel", type:"creature", subtype:"Angel", cost:{W:1,generic:4}, colors:["W"], power:4, toughness:4, abilities:["flying","vigilance"], art:"⚔️", rarity:"rare" },
-  { id:"w2", name:"Savannah Lions", type:"creature", subtype:"Cat", cost:{W:1,generic:0}, colors:["W"], power:2, toughness:1, abilities:[], art:"🦁", rarity:"common" },
-  { id:"w3", name:"Wrath of God", type:"sorcery", cost:{W:2,generic:2}, colors:["W"], effect:"destroy_all_creatures", art:"✨", rarity:"rare" },
-  { id:"w4", name:"Swords to Plowshares", type:"instant", cost:{W:1,generic:0}, colors:["W"], effect:"exile_creature", art:"⚡", rarity:"uncommon" },
-  { id:"w5", name:"White Knight", type:"creature", subtype:"Knight", cost:{W:2,generic:0}, colors:["W"], power:2, toughness:2, abilities:["first_strike"], art:"🛡️", rarity:"uncommon" },
-  { id:"u1", name:"Counterspell", type:"instant", cost:{U:2,generic:0}, colors:["U"], effect:"counter_spell", art:"🌊", rarity:"common" },
-  { id:"u2", name:"Air Elemental", type:"creature", subtype:"Elemental", cost:{U:2,generic:3}, colors:["U"], power:4, toughness:4, abilities:["flying"], art:"💨", rarity:"uncommon" },
-  { id:"u3", name:"Brainstorm", type:"instant", cost:{U:1,generic:0}, colors:["U"], effect:"draw_3", art:"🧠", rarity:"common" },
-  { id:"b1", name:"Dark Ritual", type:"instant", cost:{B:1,generic:0}, colors:["B"], effect:"add_3_black_mana", art:"💀", rarity:"common" },
-  { id:"b2", name:"Hypnotic Specter", type:"creature", subtype:"Specter", cost:{B:2,generic:1}, colors:["B"], power:2, toughness:2, abilities:["flying"], art:"👻", rarity:"uncommon" },
-  { id:"b3", name:"Terror", type:"instant", cost:{B:1,generic:1}, colors:["B"], effect:"destroy_creature", art:"☠️", rarity:"common" },
-  { id:"b4", name:"Lord of the Pit", type:"creature", subtype:"Demon", cost:{B:3,generic:4}, colors:["B"], power:7, toughness:7, abilities:["flying","trample"], art:"🦇", rarity:"rare" },
-  { id:"r1", name:"Lightning Bolt", type:"instant", cost:{R:1,generic:0}, colors:["R"], effect:"deal_3_damage", art:"⚡", rarity:"common" },
-  { id:"r2", name:"Shivan Dragon", type:"creature", subtype:"Dragon", cost:{R:2,generic:4}, colors:["R"], power:5, toughness:5, abilities:["flying"], art:"🐉", rarity:"rare" },
-  { id:"r3", name:"Fireball", type:"sorcery", cost:{R:1,generic:0}, colors:["R"], effect:"deal_4_damage", art:"🔥", rarity:"common" },
-  { id:"r4", name:"Goblin Raider", type:"creature", subtype:"Goblin", cost:{R:1,generic:1}, colors:["R"], power:2, toughness:2, abilities:["haste"], art:"👺", rarity:"common" },
-  { id:"g1", name:"Giant Growth", type:"instant", cost:{G:1,generic:0}, colors:["G"], effect:"pump_creature", pump:{power:3,toughness:3}, art:"🌿", rarity:"common" },
-  { id:"g2", name:"Craw Wurm", type:"creature", subtype:"Wurm", cost:{G:2,generic:4}, colors:["G"], power:6, toughness:4, abilities:[], art:"🐍", rarity:"common" },
-  { id:"g3", name:"Llanowar Elves", type:"creature", subtype:"Elf Druid", cost:{G:1,generic:0}, colors:["G"], power:1, toughness:1, abilities:["tap_mana"], art:"🧝", rarity:"common" },
-  { id:"g4", name:"Force of Nature", type:"creature", subtype:"Elemental", cost:{G:4,generic:2}, colors:["G"], power:8, toughness:8, abilities:["trample"], art:"🌪️", rarity:"rare" },
-  { id:"l1", name:"Plains", type:"land", produces:["W"], colors:[], art:"🏔️" },
-  { id:"l2", name:"Island", type:"land", produces:["U"], colors:[], art:"🏝️" },
-  { id:"l3", name:"Swamp", type:"land", produces:["B"], colors:[], art:"🌑" },
-  { id:"l4", name:"Mountain", type:"land", produces:["R"], colors:[], art:"🌋" },
-  { id:"l5", name:"Forest", type:"land", produces:["G"], colors:[], art:"🌳" },
+  // WHITE
+  { id:"w1", name:"Serra Angel",          type:"creature", subtype:"Angel",    cost:{W:1,generic:4}, colors:["W"], power:4, toughness:4, abilities:["flying","vigilance"],    rarity:"rare" },
+  { id:"w2", name:"Savannah Lions",       type:"creature", subtype:"Cat",      cost:{W:1,generic:0}, colors:["W"], power:2, toughness:1, abilities:[],                        rarity:"common" },
+  { id:"w3", name:"Wrath of God",         type:"sorcery",                      cost:{W:2,generic:2}, colors:["W"], effect:"destroy_all_creatures",                            rarity:"rare" },
+  { id:"w4", name:"Swords to Plowshares", type:"instant",                      cost:{W:1,generic:0}, colors:["W"], effect:"exile_creature",   targeting:"opp_creature",       rarity:"uncommon" },
+  { id:"w5", name:"White Knight",         type:"creature", subtype:"Knight",   cost:{W:2,generic:0}, colors:["W"], power:2, toughness:2, abilities:["first_strike","protection_black"], rarity:"uncommon" },
+  // BLUE
+  { id:"u1", name:"Counterspell",         type:"instant",                      cost:{U:2,generic:0}, colors:["U"], effect:"counter_spell",                                    rarity:"common" },
+  { id:"u2", name:"Air Elemental",        type:"creature", subtype:"Elemental",cost:{U:2,generic:3}, colors:["U"], power:4, toughness:4, abilities:["flying"],               rarity:"uncommon" },
+  { id:"u3", name:"Brainstorm",           type:"instant",                      cost:{U:1,generic:0}, colors:["U"], effect:"draw_3",                                           rarity:"common" },
+  // BLACK
+  { id:"b1", name:"Dark Ritual",          type:"instant",                      cost:{B:1,generic:0}, colors:["B"], effect:"add_3_black_mana",                                rarity:"common" },
+  { id:"b2", name:"Hypnotic Specter",     type:"creature", subtype:"Specter",  cost:{B:2,generic:1}, colors:["B"], power:2, toughness:2, abilities:["flying","discard_on_damage"], rarity:"uncommon" },
+  { id:"b3", name:"Terror",               type:"instant",                      cost:{B:1,generic:1}, colors:["B"], effect:"destroy_creature", targeting:"opp_creature_nonblack", rarity:"common" },
+  { id:"b4", name:"Lord of the Pit",      type:"creature", subtype:"Demon",    cost:{B:3,generic:4}, colors:["B"], power:7, toughness:7, abilities:["flying","trample","upkeep_sacrifice"], rarity:"rare" },
+  // RED
+  { id:"r1", name:"Lightning Bolt",       type:"instant",                      cost:{R:1,generic:0}, colors:["R"], effect:"deal_3_damage",  targeting:"any",                  rarity:"common" },
+  { id:"r2", name:"Shivan Dragon",        type:"creature", subtype:"Dragon",   cost:{R:2,generic:4}, colors:["R"], power:5, toughness:5, abilities:["flying","pump_R"],       rarity:"rare" },
+  { id:"r3", name:"Fireball",             type:"sorcery",                      cost:{R:1,generic:0}, colors:["R"], effect:"deal_x_damage",  targeting:"any",                  rarity:"uncommon" },
+  { id:"r4", name:"Goblin Raider",        type:"creature", subtype:"Goblin",   cost:{R:1,generic:1}, colors:["R"], power:2, toughness:2, abilities:["haste","cant_block"],    rarity:"common" },
+  // GREEN
+  { id:"g1", name:"Giant Growth",         type:"instant",                      cost:{G:1,generic:0}, colors:["G"], effect:"pump_creature",  targeting:"my_creature", pump:{power:3,toughness:3}, rarity:"common" },
+  { id:"g2", name:"Craw Wurm",            type:"creature", subtype:"Wurm",     cost:{G:2,generic:4}, colors:["G"], power:6, toughness:4, abilities:[],                        rarity:"common" },
+  { id:"g3", name:"Llanowar Elves",       type:"creature", subtype:"Elf Druid",cost:{G:1,generic:0}, colors:["G"], power:1, toughness:1, abilities:["tap_mana"],              rarity:"common" },
+  { id:"g4", name:"Force of Nature",      type:"creature", subtype:"Elemental",cost:{G:4,generic:2}, colors:["G"], power:8, toughness:8, abilities:["trample","upkeep_pay_4G"], rarity:"rare" },
+  // LANDS
+  { id:"l1", name:"Plains",   type:"land", produces:["W"], colors:[] },
+  { id:"l2", name:"Island",   type:"land", produces:["U"], colors:[] },
+  { id:"l3", name:"Swamp",    type:"land", produces:["B"], colors:[] },
+  { id:"l4", name:"Mountain", type:"land", produces:["R"], colors:[] },
+  { id:"l5", name:"Forest",   type:"land", produces:["G"], colors:[] },
 ];
 
 // ─── HELPERS ─────────────────────────────────────────────────
@@ -160,6 +166,7 @@ const broadcastRoom = (room) => {
       blockers: room.blockers,
       log: room.log.slice(-30),
       winner: room.winner,
+      isBot: room.isBot || false,
       players: room.players.map((p, i) => ({
         ...p,
         // hide opponent's hand (show count only)
@@ -181,7 +188,15 @@ const checkWinner = (room) => {
 
 const untapAll = (player) => ({
   ...player,
-  battlefield: player.battlefield.map(c => ({ ...c, tapped: false, summoningSick: false })),
+  battlefield: player.battlefield.map(c => {
+    const base = { ...c, tapped: false, summoningSick: false };
+    // Reseta pump temporário (Shivan Dragon pump_R)
+    if (c._pumped) {
+      base.power = (c.power || 0) - c._pumped;
+      base._pumped = 0;
+    }
+    return base;
+  }),
   landsPlayedThisTurn: 0,
   manaPool: { W:0, U:0, B:0, R:0, G:0 },
 });
@@ -202,9 +217,49 @@ const advanceStep = (room) => {
     room.players[room.turn] = untapAll(room.players[room.turn]);
     addLog(room, `🔄 Turno ${room.turnNumber} — ${room.players[room.turn].name}`, "system");
   }
-  if (room.step === "draw" && room.turnNumber > 1) {
-    room.players[room.turn] = drawCards(room.players[room.turn], 1);
-    addLog(room, `📖 ${room.players[room.turn].name} compra uma carta`, "draw");
+  if (room.step === "upkeep") {
+    // Processa habilidades de manutenção das permanentes em campo
+    const activePlayer = room.players[room.turn];
+    // Cria cópia do campo para iterar (pode ser modificado dentro do loop)
+    [...activePlayer.battlefield].forEach(card => {
+
+      // Lord of the Pit: sacrifique uma criatura ou perde 7 de vida
+      if ((card.abilities || []).includes("upkeep_sacrifice")) {
+        const sacrificeTargets = activePlayer.battlefield.filter(c =>
+          c.type === "creature" && c.uid !== card.uid
+        );
+        if (sacrificeTargets.length > 0) {
+          const victim = sacrificeTargets.sort((a,b) =>
+            ((a.power||0)+(a.toughness||0)) - ((b.power||0)+(b.toughness||0))
+          )[0];
+          activePlayer.battlefield = activePlayer.battlefield.filter(c => c.uid !== victim.uid);
+          activePlayer.graveyard.push(victim);
+          addLog(room, `🦇 ${card.name} exige sacrifício! ${victim.name} foi sacrificado.`, "combat");
+        } else {
+          activePlayer.life -= 7;
+          addLog(room, `🦇 ${card.name} — sem criaturas para sacrificar! ${activePlayer.name} perde 7 de vida (${activePlayer.life}❤️)`, "combat");
+          checkWinner(room);
+        }
+      }
+
+      // Force of Nature: pague GGGG na manutenção ou receba 8 de dano
+      if ((card.abilities || []).includes("upkeep_pay_4G")) {
+        const pool = activePlayer.manaPool;
+        if ((pool.G || 0) >= 4) {
+          pool.G -= 4;
+          addLog(room, `🌿 ${card.name}: ${activePlayer.name} pagou GGGG na manutenção.`, "info");
+        } else {
+          activePlayer.life -= 8;
+          addLog(room, `🌿 ${card.name} — ${activePlayer.name} não pagou GGGG e recebeu 8 de dano! (${activePlayer.life}❤️)`, "combat");
+          checkWinner(room);
+        }
+      }
+    });
+  }
+
+  if (room.step === "draw") {
+    // Não compra automaticamente — jogador clica em "Comprar"
+    // (evita dupla compra: advanceStep + draw_card)
   }
   if (room.step === "combat") {
     room.combatPhase = "declare_attackers";
@@ -228,57 +283,91 @@ const advanceStep = (room) => {
 const resolveEffect = (room, card, casterIdx, targetUid) => {
   const oppIdx = 1 - casterIdx;
 
-  // ✅ FIX: sempre lê e escreve via room.players[idx] para garantir persistência
-  if (card.effect === "deal_3_damage" || card.effect === "deal_4_damage") {
-    const dmg = card.effect === "deal_3_damage" ? 3 : 4;
-    const tgt = room.players[oppIdx].battlefield.find(c => c.uid === targetUid);
-    if (tgt) {
-      room.players[oppIdx].battlefield = room.players[oppIdx].battlefield
-        .map(c => c.uid === targetUid ? { ...c, damage: (c.damage || 0) + dmg } : c)
-        .filter(c => (c.toughness || 0) > (c.damage || 0));
-      addLog(room, `⚡ ${card.name} causa ${dmg} dano a ${tgt.name}`, "combat");
-    } else {
+  // ── Dano (Lightning Bolt = 3, Fireball = X baseado no mana gasto) ──
+  if (card.effect === "deal_3_damage" || card.effect === "deal_x_damage") {
+    const dmg = card.effect === "deal_x_damage" ? (card._xDmg || 1) : 3;
+
+    if (targetUid === "player") {
+      // Dano direto ao jogador oponente
       room.players[oppIdx].life -= dmg;
-      addLog(room, `⚡ ${card.name} causa ${dmg} dano direto! (${room.players[oppIdx].name} agora tem ${room.players[oppIdx].life} de vida)`, "combat");
+      addLog(room, `⚡ ${card.name} causa ${dmg} de dano direto a ${room.players[oppIdx].name}! (${room.players[oppIdx].life} ❤️)`, "combat");
+    } else {
+      const tgt = room.players[oppIdx].battlefield.find(c => c.uid === targetUid)
+                || room.players[casterIdx].battlefield.find(c => c.uid === targetUid);
+      const tgtOwner = room.players[oppIdx].battlefield.find(c => c.uid === targetUid) ? oppIdx : casterIdx;
+      if (tgt) {
+        room.players[tgtOwner].battlefield = room.players[tgtOwner].battlefield
+          .map(c => c.uid === targetUid ? { ...c, damage: (c.damage || 0) + dmg } : c)
+          .filter(c => (c.toughness || 0) > (c.damage || 0));
+        addLog(room, `⚡ ${card.name} causa ${dmg} dano a ${tgt.name}!`, "combat");
+      } else {
+        // Sem alvo específico = dano ao jogador
+        room.players[oppIdx].life -= dmg;
+        addLog(room, `⚡ ${card.name} causa ${dmg} de dano direto a ${room.players[oppIdx].name}! (${room.players[oppIdx].life} ❤️)`, "combat");
+      }
     }
+    checkWinner(room);
   }
 
+  // ── Terror / destroy_creature ──
   if (card.effect === "destroy_creature") {
     const tgt = room.players[oppIdx].battlefield.find(c => c.uid === targetUid);
     if (tgt) {
-      room.players[oppIdx].battlefield = room.players[oppIdx].battlefield.filter(c => c.uid !== targetUid);
-      room.players[oppIdx].graveyard.push(tgt);
-      addLog(room, `☠️ ${tgt.name} destruído por ${card.name}!`, "destroy");
+      // Terror não destrói criaturas pretas (protection_black / black creature)
+      if (card.name === "Terror" && (tgt.colors||[]).includes("B")) {
+        addLog(room, `☠️ Terror falhou — ${tgt.name} é preto!`, "info");
+      } else if (card.name === "Terror" && (tgt.abilities||[]).includes("indestructible")) {
+        addLog(room, `☠️ Terror falhou — ${tgt.name} é indestrutível!`, "info");
+      } else {
+        // Proteção contra preto (White Knight)
+        if ((tgt.abilities||[]).includes("protection_black") && (card.colors||[]).includes("B")) {
+          addLog(room, `🛡️ ${tgt.name} tem proteção contra preto! ${card.name} falhou.`, "info");
+        } else {
+          room.players[oppIdx].battlefield = room.players[oppIdx].battlefield.filter(c => c.uid !== targetUid);
+          room.players[oppIdx].graveyard.push(tgt);
+          addLog(room, `☠️ ${tgt.name} destruído por ${card.name}!`, "destroy");
+        }
+      }
     }
   }
 
+  // ── Swords to Plowshares / exile_creature ──
   if (card.effect === "exile_creature") {
     const tgt = room.players[oppIdx].battlefield.find(c => c.uid === targetUid);
     if (tgt) {
       room.players[oppIdx].battlefield = room.players[oppIdx].battlefield.filter(c => c.uid !== targetUid);
-      addLog(room, `✨ ${tgt.name} exilado por ${card.name}!`, "exile");
+      // Swords to Plowshares: oponente ganha vida = poder da criatura
+      if (card.name === "Swords to Plowshares") {
+        room.players[oppIdx].life += (tgt.power || 0);
+        addLog(room, `✨ ${tgt.name} exilado! ${room.players[oppIdx].name} ganha ${tgt.power || 0} de vida.`, "exile");
+      } else {
+        addLog(room, `✨ ${tgt.name} exilado por ${card.name}!`, "exile");
+      }
     }
   }
 
+  // ── Wrath of God ──
   if (card.effect === "destroy_all_creatures") {
     room.players[0].graveyard.push(...room.players[0].battlefield.filter(c => c.type !== "land"));
     room.players[0].battlefield = room.players[0].battlefield.filter(c => c.type === "land");
     room.players[1].graveyard.push(...room.players[1].battlefield.filter(c => c.type !== "land"));
     room.players[1].battlefield = room.players[1].battlefield.filter(c => c.type === "land");
-    addLog(room, `🌪️ Ira de Deus! Todas as criaturas destruídas!`, "destroy");
+    addLog(room, `☀️ Ira de Deus! Todas as criaturas foram destruídas!`, "destroy");
   }
 
+  // ── Brainstorm / draw_3 ──
   if (card.effect === "draw_3") {
     room.players[casterIdx] = drawCards(room.players[casterIdx], 3);
     addLog(room, `🧠 ${room.players[casterIdx].name} compra 3 cartas!`, "draw");
   }
 
+  // ── Dark Ritual / add_3_black_mana ──
   if (card.effect === "add_3_black_mana") {
     room.players[casterIdx].manaPool.B = (room.players[casterIdx].manaPool.B || 0) + 3;
     addLog(room, `💀 Ritual Negro! +3 mana preto`, "mana");
   }
 
-  // ✅ FIX: Counterspell agora realmente contramagica o último feitiço do oponente
+  // ── Counterspell ──
   if (card.effect === "counter_spell") {
     const lastSpell = room.players[oppIdx].graveyard.slice().reverse().find(c => c.type !== "land");
     if (lastSpell) {
@@ -288,6 +377,7 @@ const resolveEffect = (room, card, casterIdx, targetUid) => {
     }
   }
 
+  // ── Giant Growth / pump_creature ──
   if (card.effect === "pump_creature") {
     const p = card.pump || { power: 3, toughness: 3 };
     const tgt = room.players[casterIdx].battlefield.find(c => c.uid === targetUid);
@@ -295,7 +385,7 @@ const resolveEffect = (room, card, casterIdx, targetUid) => {
       room.players[casterIdx].battlefield = room.players[casterIdx].battlefield.map(c =>
         c.uid === targetUid ? { ...c, power: (c.power || 0) + p.power, toughness: (c.toughness || 0) + p.toughness } : c
       );
-      addLog(room, `💪 ${tgt.name} +${p.power}/+${p.toughness}!`, "buff");
+      addLog(room, `💪 ${tgt.name} recebe +${p.power}/+${p.toughness} até fim do turno!`, "buff");
     }
   }
 };
@@ -307,27 +397,112 @@ const resolveCombat = (room) => {
   room.attackers.forEach(atkUid => {
     const attacker = room.players[atkIdx].battlefield.find(c => c.uid === atkUid);
     if (!attacker) return;
+
     const blockerUid = room.blockers[atkUid];
 
     if (blockerUid) {
       const blocker = room.players[defIdx].battlefield.find(c => c.uid === blockerUid);
-      if (!blocker) return;
-      const ad = attacker.power || 0, bd = blocker.power || 0;
-      addLog(room, `💥 ${attacker.name}(${ad}) vs ${blocker.name}(${bd})`, "combat");
-      if (ad >= (blocker.toughness || 0)) {
+      if (!blocker) {
+        // Bloqueador morreu antes — dano vai ao jogador
+        room.players[defIdx].life -= (attacker.power || 0);
+        addLog(room, `🗡️ ${attacker.name} passa! ${room.players[defIdx].name}: ${room.players[defIdx].life} ❤️`, "combat");
+        return;
+      }
+
+      // Proteção contra cores
+      const atkColors = attacker.colors || [];
+      const blkAbils = blocker.abilities || [];
+      const atkAbils = attacker.abilities || [];
+      const blockerProtected =
+        (blkAbils.includes("protection_black") && atkColors.includes("B")) ||
+        (blkAbils.includes("protection_red") && atkColors.includes("R")) ||
+        (blkAbils.includes("protection_white") && atkColors.includes("W")) ||
+        (blkAbils.includes("protection_blue") && atkColors.includes("U")) ||
+        (blkAbils.includes("protection_green") && atkColors.includes("G"));
+
+      if (blockerProtected) {
+        addLog(room, `🛡️ ${blocker.name} tem proteção! ${attacker.name} não causa dano.`, "combat");
+        // Bloqueador ainda causa dano ao atacante
+        if ((blocker.power || 0) >= (attacker.toughness || 0)) {
+          room.players[atkIdx].battlefield = room.players[atkIdx].battlefield.filter(c => c.uid !== atkUid);
+          room.players[atkIdx].graveyard.push(attacker);
+          addLog(room, `💀 ${attacker.name} morre!`, "destroy");
+        }
+        return;
+      }
+
+      const ad = attacker.power || 0;
+      const bd = blocker.power || 0;
+      const at = attacker.toughness || 0;
+      const bt = blocker.toughness || 0;
+
+      // First strike: atacante com first_strike causa dano antes
+      const atkFirstStrike = atkAbils.includes("first_strike");
+      const blkFirstStrike = blkAbils.includes("first_strike");
+
+      addLog(room, `💥 ${attacker.name}(${ad}/${at}) vs ${blocker.name}(${bd}/${bt})`, "combat");
+
+      let atkDead = false, blkDead = false;
+
+      if (atkFirstStrike && !blkFirstStrike) {
+        // Atacante causa dano primeiro
+        if (ad >= bt) { blkDead = true; }
+        if (!blkDead && bd >= at) { atkDead = true; }
+      } else if (blkFirstStrike && !atkFirstStrike) {
+        // Bloqueador causa dano primeiro
+        if (bd >= at) { atkDead = true; }
+        if (!atkDead && ad >= bt) { blkDead = true; }
+      } else {
+        // Dano simultâneo
+        if (ad >= bt) blkDead = true;
+        if (bd >= at) atkDead = true;
+      }
+
+      // Trample: excesso de dano vai ao jogador
+      if (atkAbils.includes("trample") && blkDead) {
+        const excessDmg = ad - bt;
+        if (excessDmg > 0) {
+          room.players[defIdx].life -= excessDmg;
+          addLog(room, `🐾 Atropelamento! ${excessDmg} de dano extra a ${room.players[defIdx].name}! (${room.players[defIdx].life} ❤️)`, "combat");
+        }
+      }
+
+      if (blkDead) {
         room.players[defIdx].battlefield = room.players[defIdx].battlefield.filter(c => c.uid !== blockerUid);
         room.players[defIdx].graveyard.push(blocker);
         addLog(room, `💀 ${blocker.name} morre!`, "destroy");
+        // Hypnotic Specter: oponente descarta uma carta aleatória ao ser danificado
+        if (atkAbils.includes("discard_on_damage")) {
+          const hand = room.players[defIdx].hand;
+          if (hand.length > 0) {
+            const disIdx = Math.floor(Math.random() * hand.length);
+            const dis = hand.splice(disIdx, 1)[0];
+            room.players[defIdx].graveyard.push(dis);
+            addLog(room, `👻 ${attacker.name} fez ${room.players[defIdx].name} descartar ${dis.name}!`, "spell");
+          }
+        }
       }
-      if (bd >= (attacker.toughness || 0)) {
+      if (atkDead) {
         room.players[atkIdx].battlefield = room.players[atkIdx].battlefield.filter(c => c.uid !== atkUid);
         room.players[atkIdx].graveyard.push(attacker);
         addLog(room, `💀 ${attacker.name} morre!`, "destroy");
       }
+
     } else {
+      // Sem bloqueador — dano direto ao jogador
       const dmg = attacker.power || 0;
       room.players[defIdx].life -= dmg;
       addLog(room, `🗡️ ${attacker.name} causa ${dmg} dano! (${room.players[defIdx].name}: ${room.players[defIdx].life} ❤️)`, "combat");
+      // Hypnotic Specter: descard quando causa dano direto
+      if ((attacker.abilities||[]).includes("discard_on_damage")) {
+        const hand = room.players[defIdx].hand;
+        if (hand.length > 0) {
+          const disIdx = Math.floor(Math.random() * hand.length);
+          const dis = hand.splice(disIdx, 1)[0];
+          room.players[defIdx].graveyard.push(dis);
+          addLog(room, `👻 ${attacker.name} fez ${room.players[defIdx].name} descartar ${dis.name}!`, "spell");
+        }
+      }
     }
   });
 
@@ -752,12 +927,13 @@ io.on("connection", (socket) => {
     socket.data.roomCode = code;
     socket.data.playerIndex = 0;
 
-    room.step = "upkeep";
+    room.step = "untap";
     room.turn = 0;
     room.turnNumber = 1;
     addLog(room, `⚔️ ${name} vs ${botName} — Que a batalha comece!`, "system");
-    room.players[0] = drawCards(room.players[0], 1);
-    addLog(room, `📖 ${name} compra uma carta`, "draw");
+    // Jogador começa com 7 cartas (já no mkPlayer), não compra extra aqui
+    // Vai para upkeep automaticamente
+    advanceStep(room); // untap → upkeep
     broadcastRoom(room);
     console.log(`Bot room ${code}: ${name} vs ${botName} (${difficulty})`);
   });
@@ -837,8 +1013,9 @@ socket.on("create_room", ({ name, colors }) => {
       room.players[0] = mkPlayer(room.sockets[0], room._pending[0].name, room._pending[0].colors);
       room.players[1] = mkPlayer(room.sockets[1], room._pending[1].name, room._pending[1].colors);
       room.step = "untap";
+      room.turnNumber = 1;
       addLog(room, `⚔️ ${room.players[0].name} vs ${room.players[1].name} — Que a batalha comece!`, "system");
-      advanceStep(room); // go to upkeep
+      advanceStep(room); // untap → upkeep (turnNumber=1, não compra)
       broadcastRoom(room);
     } else {
       socket.emit("waiting", { msg: "Aguardando oponente..." });
@@ -896,7 +1073,9 @@ socket.on("create_room", ({ name, colors }) => {
     const code = socket.data.roomCode;
     const idx = socket.data.playerIndex;
     const room = rooms[code];
-    if (!room || room.turn !== idx) return;
+    if (!room) return;
+    // Permite virar terra fora do turno apenas em partida vs bot (para lançar instantâneos)
+    if (room.turn !== idx && !room.isBot) return;
     const player = room.players[idx];
     const card = player.battlefield.find(c => c.uid === cardUid);
     if (!card || card.type !== "land" || card.tapped) return;
@@ -911,10 +1090,26 @@ socket.on("create_room", ({ name, colors }) => {
     const code = socket.data.roomCode;
     const idx = socket.data.playerIndex;
     const room = rooms[code];
-    if (!room || room.turn !== idx || !["main1","main2","combat"].includes(room.step)) return;
+    if (!room) return;
     const player = room.players[idx];
     const card = player.hand.find(c => c.uid === cardUid);
     if (!card || card.type === "land") return;
+
+    const isMyTurn = room.turn === idx;
+    const isInstant = card.type === "instant";
+
+    // Criaturas e sorceries: só no próprio turno, em main1/main2
+    if (!isInstant && (!isMyTurn || !["main1","main2"].includes(room.step))) return;
+    // Instantâneos: pode lançar no próprio turno (qualquer fase) ou no turno do oponente
+    if (isInstant && !isMyTurn && room.isBot) {
+      // OK — permite resposta durante turno do bot
+    } else if (isInstant && !isMyTurn && !room.isBot) {
+      // Multiplayer: por ora só no próprio turno (sem stack implementado)
+      return;
+    } else if (!isInstant && !isMyTurn) {
+      return;
+    }
+
     if (!canAfford(card, player.manaPool)) { socket.emit("error", { msg: "Mana insuficiente!" }); return; }
     player.manaPool = payMana(card.cost || {}, player.manaPool);
     player.hand = player.hand.filter(c => c.uid !== cardUid);
@@ -922,9 +1117,18 @@ socket.on("create_room", ({ name, colors }) => {
       player.battlefield.push({ ...card, uid: mkuid(), tapped: false, summoningSick: true, damage: 0 });
       addLog(room, `🐉 ${player.name} convoca ${card.name} (${card.power}/${card.toughness})`, "play");
     } else {
+      // Fireball: X = todo mana restante na pool
+      let castCard = card;
+      if (card.effect === "deal_x_damage") {
+        const xDmg = Object.values(player.manaPool).reduce((a,b) => a+b, 0);
+        castCard = { ...card, _xDmg: Math.max(1, xDmg) };
+        player.manaPool = { W:0, U:0, B:0, R:0, G:0 }; // gasta todo mana restante
+        addLog(room, `🔥 ${player.name} lança ${card.name} por ${castCard._xDmg} de dano!`, "spell");
+      } else {
+        addLog(room, `🪄 ${player.name} lança ${card.name}`, "spell");
+      }
       player.graveyard.push(card);
-      addLog(room, `🪄 ${player.name} lança ${card.name}`, "spell");
-      resolveEffect(room, card, idx, targetUid);
+      resolveEffect(room, castCard, idx, targetUid);
     }
     checkWinner(room);
     broadcastRoom(room);
@@ -1019,6 +1223,8 @@ socket.on("create_room", ({ name, colors }) => {
     if (!room || room.turn === idx || room.combatPhase !== "declare_blockers") return;
     const card = room.players[idx].battlefield.find(c => c.uid === blockerUid);
     if (!card || card.type !== "creature" || card.tapped) return;
+    // cant_block: Goblin Raider não pode bloquear
+    if ((card.abilities || []).includes("cant_block")) return;
     // remove this blocker from any previous assignment
     for (const k of Object.keys(room.blockers)) {
       if (room.blockers[k] === blockerUid) delete room.blockers[k];
@@ -1036,6 +1242,24 @@ socket.on("create_room", ({ name, colors }) => {
     addLog(room, `🛡️ ${room.players[idx].name} declara bloqueadores`, "combat");
     resolveCombat(room);
     advanceStep(room); // go to main2
+    broadcastRoom(room);
+  });
+
+  // ── Pump Creature (Shivan Dragon: R → +1/+0 até fim do turno) ──
+  socket.on("pump_creature_ability", ({ cardUid }) => {
+    const code = socket.data.roomCode;
+    const idx = socket.data.playerIndex;
+    const room = rooms[code];
+    if (!room || room.turn !== idx) return;
+    const player = room.players[idx];
+    const card = player.battlefield.find(c => c.uid === cardUid);
+    if (!card || !(card.abilities||[]).includes("pump_R")) return;
+    if ((player.manaPool.R || 0) < 1) { return; }
+    player.manaPool.R -= 1;
+    player.battlefield = player.battlefield.map(c =>
+      c.uid === cardUid ? { ...c, power: (c.power||0) + 1, _pumped: (c._pumped||0) + 1 } : c
+    );
+    addLog(room, `🔥 ${card.name} recebe +1/+0! (agora ${card.power+1}/${card.toughness})`, "spell");
     broadcastRoom(room);
   });
 
