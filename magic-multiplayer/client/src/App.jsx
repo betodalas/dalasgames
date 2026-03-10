@@ -289,6 +289,8 @@ export default function App() {
   const cp = gs?.combatPhase;
   const atks = gs?.attackers || [];
   const blks = gs?.blockers || {};
+  const isMobile = window.innerWidth <= 900 || !window.matchMedia("(hover: hover)").matches;
+  const [cardPopup, setCardPopup] = useState(null);
 
   const affordable = (card) => {
     if (!me || card.type==="land") return true;
@@ -304,6 +306,17 @@ export default function App() {
 
   const clickHand = (card) => {
     if (!isMy) return;
+    if (isMobile) { setCardPopup({card, from:"hand"}); return; }
+    if (card.type==="land") { if (["main1","main2"].includes(step)) emit("play_land",{cardUid:card.uid}); return; }
+    if (!["main1","main2","combat"].includes(step)) return;
+    if (!affordable(card)) { showError("Mana insuficiente!"); return; }
+    const needs = card.effect && ["destroy_creature","exile_creature","deal_3_damage","deal_4_damage","pump_creature"].includes(card.effect);
+    if (needs) { setSelCard(card.uid); setTargetMode(card.effect==="pump_creature"?"my":"opp"); }
+    else emit("cast_card",{cardUid:card.uid});
+  };
+
+  const playCardFromPopup = (card) => {
+    setCardPopup(null);
     if (card.type==="land") { if (["main1","main2"].includes(step)) emit("play_land",{cardUid:card.uid}); return; }
     if (!["main1","main2","combat"].includes(step)) return;
     if (!affordable(card)) { showError("Mana insuficiente!"); return; }
@@ -401,27 +414,55 @@ export default function App() {
         </div>
       )}
 
-      {/* ── OPPONENT ── */}
-      <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"2px 10px",flexShrink:0}}>
-        <PBar player={opp} active={!isMy} />
-        <div style={{display:"flex",gap:"3px",marginBottom:"2px",justifyContent:"flex-end"}}>
-          {opp.hand.map((_,i)=><div key={i} style={{width:"clamp(20px,4vw,30px)",height:"clamp(28px,5.5vh,42px)",borderRadius:"4px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
+      {/* ── POPUP DE CARTA (mobile) ── */}
+      {cardPopup && (
+        <div onClick={()=>setCardPopup(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.85)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",gap:"14px",padding:"16px"}}>
+          <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:"12px",alignItems:"flex-start",maxWidth:"100%"}}>
+            {/* Imagem grande */}
+            <div style={{width:"min(200px,45vw)",flexShrink:0,borderRadius:"10px",overflow:"hidden",border:"2px solid #c9a84c",boxShadow:"0 0 40px #c9a84c40"}}>
+              <CardImage name={cardPopup.card.name}/>
+            </div>
+            {/* Info + botões */}
+            <div style={{flex:1,display:"flex",flexDirection:"column",gap:"8px",minWidth:0}}>
+              <div style={{fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"14px",color:"#f0d48a"}}>{CARD_PT[cardPopup.card.name]?.nome||cardPopup.card.name}</div>
+              <div style={{fontSize:"10px",color:"#6a8aaa"}}>{CARD_PT[cardPopup.card.name]?.tipo||tipoPT(cardPopup.card)}</div>
+              {cardPopup.card.type==="creature"&&<div style={{fontSize:"16px",color:"#f0d48a",fontWeight:"bold"}}>{cardPopup.card.power}/{cardPopup.card.toughness}</div>}
+              {cardPopup.card.cost&&<div style={{display:"flex",gap:"3px",alignItems:"center",flexWrap:"wrap"}}><span style={{fontSize:"9px",color:"#4a6a8a"}}>Custo:</span>{custoIcones(cardPopup.card.cost)}</div>}
+              {cardPopup.card.abilities?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"3px"}}>{cardPopup.card.abilities.map(a=><span key={a} style={{background:"rgba(255,200,80,.1)",border:"1px solid #3a2a08",borderRadius:"4px",padding:"2px 5px",fontSize:"9px",color:"#d4a030"}}>{ABILITY_PT[a]||a}</span>)}</div>}
+              {cardPopup.card.effect&&<div style={{fontSize:"10px",color:"#90b8d0",lineHeight:"1.4",background:"rgba(0,0,0,.4)",borderRadius:"5px",padding:"5px 7px",borderLeft:"2px solid #2a5070"}}>{EFFECT_PT[cardPopup.card.effect]||cardPopup.card.effect}</div>}
+              {/* Botões de ação */}
+              <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"4px"}}>
+                {cardPopup.from==="hand"&&isMy&&(
+                  affordable(cardPopup.card)
+                    ? <button onClick={()=>playCardFromPopup(cardPopup.card)} style={{background:"linear-gradient(135deg,#0a2008,#1a4010)",border:"2px solid #4ade80",color:"#4ade80",padding:"10px",borderRadius:"8px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",fontWeight:"700"}}>
+                        {cardPopup.card.type==="land"?"🌍 Jogar Terra":"✨ Lançar Carta"}
+                      </button>
+                    : <div style={{fontSize:"11px",color:"#ff8888",textAlign:"center",padding:"8px",background:"rgba(80,0,0,.4)",borderRadius:"6px"}}>⚠️ Mana insuficiente</div>
+                )}
+                <button onClick={()=>setCardPopup(null)} style={{background:"rgba(0,0,0,.5)",border:"1px solid #2a2a3a",color:"#8a8aaa",padding:"8px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"12px"}}>✕ Fechar</button>
+              </div>
+            </div>
+          </div>
         </div>
-        <div style={{display:"flex",gap:"3px",flexWrap:"nowrap",overflowX:"auto",minHeight:"clamp(50px,12vh,80px)",alignItems:"center",paddingBottom:"2px"}}>
-          {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{}} onHov={setHoveredDelayed} small/>)}
-          {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"50px",background:"#0e1d2e",flexShrink:0}}/>}
-          {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"} onClick={()=>clickCreature(c,true)} onHov={setHoveredDelayed} small/>)}
+      )}
+      <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"2px 8px",flexShrink:0}}>
+        <PBar player={opp} active={!isMy} />
+        <div style={{display:"flex",gap:"2px",marginBottom:"2px",justifyContent:"flex-end"}}>
+          {opp.hand.map((_,i)=><div key={i} style={{width:"clamp(18px,3.5vw,28px)",height:"clamp(25px,5vh,38px)",borderRadius:"3px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
+        </div>
+        <div style={{display:"flex",gap:"3px",flexWrap:"nowrap",overflowX:"auto",minHeight:"clamp(48px,11vh,75px)",alignItems:"center",paddingBottom:"2px"}}>
+          {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>isMobile&&setCardPopup({card:c,from:"opp"})} onHov={setHoveredDelayed} small/>)}
+          {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"45px",background:"#0e1d2e",flexShrink:0}}/>}
+          {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"} onClick={()=>{ if(isMobile&&!selCard) setCardPopup({card:c,from:"opp"}); else clickCreature(c,true); }} onHov={setHoveredDelayed} small/>)}
         </div>
       </div>
 
       {/* ── CENTER ── */}
-      <div style={{flex:1,display:"flex",gap:"6px",padding:"3px 10px",background:"radial-gradient(ellipse at center,#08130a,#030604)",minHeight:0,overflow:"hidden",alignItems:"stretch"}}>
-        {/* My creatures */}
+      <div style={{flex:1,display:"flex",gap:"6px",padding:"3px 8px",background:"radial-gradient(ellipse at center,#08130a,#030604)",minHeight:0,overflow:"hidden",alignItems:"stretch"}}>
         <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:"4px",alignItems:"center",justifyContent:"center",overflowY:"auto"}}>
-          {me.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="my"} onClick={()=>clickCreature(c,false)} onHov={setHoveredDelayed}/>)}
+          {me.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="my"} onClick={()=>{ if(isMobile&&!selCard&&cp!=="declare_attackers"&&cp!=="declare_blockers") setCardPopup({card:c,from:"my"}); else clickCreature(c,false); }} onHov={setHoveredDelayed}/>)}
         </div>
-        {/* Panel */}
-        <div style={{width:"clamp(160px,28vw,225px)",flexShrink:0,display:"flex",flexDirection:"column",gap:"3px",justifyContent:"center",overflowY:"auto"}}>
+        {!isMobile && <div style={{width:"225px",flexShrink:0,display:"flex",flexDirection:"column",gap:"3px",justifyContent:"center",overflowY:"auto"}}>
           <Steps step={step} turn={gs.turn} tn={gs.turnNumber} mi={myIndex}/>
           <Mana pool={me.manaPool}/>
           {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"4px",padding:"2px 6px",fontSize:"9px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
@@ -431,32 +472,47 @@ export default function App() {
               {step==="untap"&&<button style={btn("#74b9ff","#030c18",true)} onClick={()=>emit("advance_step")}>🔄 Desvirar</button>}
               {step==="upkeep"&&<button style={btn("#a29bfe","#080318",true)} onClick={()=>emit("advance_step")}>⬆️ Manutenção</button>}
               {step==="draw"&&<button style={btn("#55efc4","#031208",true)} onClick={()=>emit("draw_card")}>📖 Comprar</button>}
-              {step==="main1"&&<>
-                <button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>⚔️ Combate</button>
-                <button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar</button>
-              </>}
-              {step==="main2"&&<>
-                <button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>🌙 Fim</button>
-                <button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar</button>
-              </>}
+              {step==="main1"&&<><button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>⚔️ Combate</button><button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar</button></>}
+              {step==="main2"&&<><button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>🌙 Fim</button><button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar</button></>}
               {step==="end"&&<button style={btn("#636e72","#0a0b0c",true)} onClick={()=>emit("advance_step")}>→ Oponente</button>}
             </>}
-            {isMy&&cp==="declare_attackers"&&<>
-              <div style={{fontSize:"9px",color:"#e17055",textAlign:"center"}}>{atks.length>0?`⚔️ ${atks.length} atacante(s)`:"🛡️ Sem ataque"}</div>
-              <button style={{...btn("#e17055","#150601",true),animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️ {atks.length>0?`Atacar (${atks.length})`:"Pular"}</button>
-            </>}
+            {isMy&&cp==="declare_attackers"&&<><div style={{fontSize:"9px",color:"#e17055",textAlign:"center"}}>{atks.length>0?`⚔️ ${atks.length} atacante(s)`:"🛡️ Sem ataque"}</div><button style={{...btn("#e17055","#150601",true),animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️ {atks.length>0?`Atacar (${atks.length})`:"Pular"}</button></>}
             {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️ Bloquear</button>}
             {!isMy&&!cp&&<div style={{fontSize:"9px",color:"#2a4a6a",fontStyle:"italic",textAlign:"center",animation:"pulse 2s infinite"}}>⏳ Aguardando...</div>}
           </div>
-        </div>
-        {/* Log — escondido em telas pequenas */}
-        <div ref={logRef} style={{width:"clamp(0px,18vw,160px)",flexShrink:0,overflowY:"auto",overflowX:"hidden",background:"rgba(0,0,0,.8)",border:"1px solid #121a22",borderRadius:"5px",padding:"4px 6px",fontSize:"8px",lineHeight:"1.5",alignSelf:"stretch",display:"clamp(0px,18vw,160px)"==="0px"?"none":"block"}}>
+        </div>}
+        {!isMobile && <div ref={logRef} style={{width:"160px",flexShrink:0,overflowY:"auto",overflowX:"hidden",background:"rgba(0,0,0,.8)",border:"1px solid #121a22",borderRadius:"5px",padding:"4px 6px",fontSize:"8px",lineHeight:"1.5",alignSelf:"stretch"}}>
           {(gs.log||[]).map((l,i)=><div key={l.id||i} style={{color:logColor(l.type),marginBottom:"1px",wordBreak:"break-word"}}>{l.msg}</div>)}
-        </div>
+        </div>}
       </div>
 
+      {/* ── MOBILE ACTION BAR ── */}
+      {isMobile && <div style={{background:"#060c18",borderTop:"2px solid #0c1b2e",padding:"4px 8px",flexShrink:0}}>
+        <div style={{display:"flex",gap:"5px",alignItems:"center",justifyContent:"space-between"}}>
+          <Mana pool={me.manaPool} compact/>
+          <div style={{fontSize:"10px",color:gs.turn===myIndex?"#f0d48a":"#3a5a7a",fontWeight:"700",flexShrink:0}}>
+            {STEP_LABELS[step]}
+          </div>
+          <div style={{display:"flex",gap:"4px",alignItems:"center",flexShrink:0}}>
+            {error&&<div style={{fontSize:"9px",color:"#ff8888",padding:"2px 5px",background:"rgba(80,0,0,.5)",borderRadius:"4px"}}>{error}</div>}
+            {selCard&&targetMode&&<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{background:"rgba(80,0,0,.5)",border:"1px solid #ff4444",color:"#ff8888",padding:"6px 8px",borderRadius:"6px",cursor:"pointer",fontSize:"11px"}}>✕</button>}
+            {isMy&&!cp&&<>
+              {step==="untap"&&<button style={{...btn("#74b9ff","#030c18",true),padding:"8px 12px"}} onClick={()=>emit("advance_step")}>🔄</button>}
+              {step==="upkeep"&&<button style={{...btn("#a29bfe","#080318",true),padding:"8px 12px"}} onClick={()=>emit("advance_step")}>⬆️</button>}
+              {step==="draw"&&<button style={{...btn("#55efc4","#031208",true),padding:"8px 14px",fontSize:"12px"}} onClick={()=>emit("draw_card")}>📖 Comprar</button>}
+              {step==="main1"&&<><button style={{...btn("#fdcb6e","#120a01",true),padding:"8px 12px"}} onClick={()=>emit("advance_step")}>⚔️</button><button style={{...btn("#636e72","#080808",true),padding:"8px 12px"}} onClick={()=>emit("skip_to_end")}>⏭️</button></>}
+              {step==="main2"&&<><button style={{...btn("#fdcb6e","#120a01",true),padding:"8px 12px"}} onClick={()=>emit("advance_step")}>🌙</button><button style={{...btn("#636e72","#080808",true),padding:"8px 12px"}} onClick={()=>emit("skip_to_end")}>⏭️</button></>}
+              {step==="end"&&<button style={{...btn("#636e72","#0a0b0c",true),padding:"8px 12px"}} onClick={()=>emit("advance_step")}>→</button>}
+            </>}
+            {isMy&&cp==="declare_attackers"&&<button style={{...btn("#e17055","#150601",true),padding:"8px 12px",animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️{atks.length>0?" "+atks.length:""}</button>}
+            {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),padding:"8px 12px",animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️</button>}
+            {!isMy&&!cp&&<div style={{fontSize:"11px",color:"#2a4a6a"}}>⏳</div>}
+          </div>
+        </div>
+      </div>}
+
       {/* ── MY LANDS ── */}
-      <div style={{background:"linear-gradient(0deg,#070e1c,#0b1626)",borderTop:"2px solid #0c1b2e",padding:"2px 10px",flexShrink:0}}>
+      <div style={{background:"linear-gradient(0deg,#070e1c,#0b1626)",borderTop:"2px solid #0c1b2e",padding:"2px 8px",flexShrink:0}}>
         <div style={{display:"flex",gap:"4px",alignItems:"center",flexWrap:"nowrap"}}>
           <PBar player={me} active={isMy} compact/>
           <div style={{display:"flex",gap:"3px",flexWrap:"nowrap",marginLeft:"5px",overflowX:"auto",flex:1,alignItems:"center"}}>
@@ -467,7 +523,7 @@ export default function App() {
       </div>
 
       {/* ── HAND ── */}
-      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"4px 10px 6px",flexShrink:0,overflow:"hidden"}} onMouseLeave={()=>setHoveredDelayed(null)}>
+      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"4px 8px 6px",flexShrink:0,overflow:"hidden"}} onMouseLeave={()=>setHoveredDelayed(null)}>
         <div style={{display:"flex",gap:"4px",overflowX:"auto",alignItems:"flex-end",paddingBottom:"3px"}}>
           {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed}/>)}
           {me.hand.length===0&&<div style={{color:"#151008",fontSize:"11px",padding:"16px",fontStyle:"italic"}}>Sem cartas na mão</div>}
@@ -512,10 +568,13 @@ function PBar({player,active,compact}) {
 }
 
 // ── Mana ──
-function Mana({pool}) {
+function Mana({pool, compact=false}) {
   const types=[{k:"W",e:"☀️"},{k:"U",e:"💧"},{k:"B",e:"💀"},{k:"R",e:"🔥"},{k:"G",e:"🌿"}];
   const tot=Object.values(pool||{}).reduce((a,b)=>a+b,0);
-  if(!tot) return <div style={{fontSize:"10px",color:"#100a04",textAlign:"center"}}>Sem mana</div>;
+  if(!tot) return <div style={{fontSize:"9px",color:"#100a04",textAlign:"center"}}>0 mana</div>;
+  if(compact) return <div style={{display:"flex",gap:"2px",alignItems:"center"}}>
+    {types.map(({k,e})=>(pool[k]||0)>0&&<div key={k} style={{background:"rgba(0,0,0,.6)",border:"1px solid #1a2a3a",borderRadius:"8px",padding:"1px 4px",fontSize:"10px"}}>{e}{pool[k]>1&&<span style={{fontSize:"9px",color:"#f0d48a"}}>{pool[k]}</span>}</div>)}
+  </div>;
   return <div style={{display:"flex",flexWrap:"wrap",gap:"3px",justifyContent:"center"}}>
     {types.map(({k,e})=>(pool[k]||0)>0&&<div key={k} style={{background:"rgba(0,0,0,.6)",border:"1px solid #1a2a3a",borderRadius:"10px",padding:"2px 6px",fontSize:"11px"}}>{Array(pool[k]).fill(0).map((_,i)=><span key={i}>{e}</span>)}</div>)}
   </div>;
