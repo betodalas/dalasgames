@@ -360,7 +360,7 @@ export default function App() {
   if (!gs||!me||!opp) return <div style={{color:"#fff",display:"flex",height:"100vh",alignItems:"center",justifyContent:"center",fontFamily:"serif",fontSize:"18px"}}>🔮 Conectando...</div>;
 
   return (
-    <div style={{fontFamily:"'Cinzel',serif",background:"#060809",height:"100vh",maxHeight:"100vh",color:"#e8d5a3",display:"flex",flexDirection:"column",overflow:"hidden",position:"relative"}}>
+    <div style={{fontFamily:"'Cinzel',serif",background:"#060809",height:"100vh",maxHeight:"100vh",color:"#e8d5a3",display:"flex",flexDirection:"column",overflow:"hidden",position:"fixed",top:0,left:0,right:0,bottom:0}}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital@1&display=swap');
         *{box-sizing:border-box;}
