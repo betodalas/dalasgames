@@ -163,6 +163,7 @@ const ABILITY_PT = {
   pump_R:           "🔥 Ative: Gaste R → +1/+0 até fim do turno",
   cant_block:       "⚔️ Não pode bloquear",
   discard_on_damage:"👻 Ao causar dano: oponente descarta uma carta aleatória",
+};
 
 const EFFECT_PT = {
   destroy_all_creatures: "💥 Destrói todas as criaturas.",
