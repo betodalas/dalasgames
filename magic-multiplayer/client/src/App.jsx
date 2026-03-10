@@ -618,45 +618,59 @@ function HCard({card,sel,can,myTurn,step,onClick,onHov}) {
 function Menu({name,setName,colors,setColors,code,setCode,error,onCreate,onJoin,onVsBot}) {
   const cls=[{k:"W",e:"☀️",n:"Branco"},{k:"U",e:"💧",n:"Azul"},{k:"B",e:"💀",n:"Preto"},{k:"R",e:"🔥",n:"Vermelho"},{k:"G",e:"🌿",n:"Verde"}];
   const tog=k=>setColors(s=>s.includes(k)?s.filter(x=>x!==k):[...s,k]);
+  const ok = colors.length>0 && name.trim();
   return (
-    <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 40%,#0c1828,#030710)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",gap:"22px",padding:"20px"}}>
+    <div style={{position:"fixed",inset:0,background:"radial-gradient(ellipse at 50% 40%,#0c1828,#030710)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",overflowY:"auto",padding:"12px 16px",gap:"10px"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap');`}</style>
-      {/* Dalas Games logo */}
-      <div style={{position:"absolute",top:"22px",left:"50%",transform:"translateX(-50%)",display:"flex",alignItems:"center",gap:"10px"}}>
-        <div style={{fontSize:"22px"}}>🎮</div>
-        <div style={{fontFamily:"'Cinzel',serif",fontWeight:"900",fontSize:"14px",letterSpacing:".3em",background:"linear-gradient(90deg,#4a90d9,#a29bfe)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>Dalas Games</div>
-        <div style={{fontSize:"22px"}}>🎮</div>
+
+      {/* Logo + Título compacto */}
+      <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
+        <div style={{fontSize:"16px"}}>🎮</div>
+        <div style={{fontWeight:"900",fontSize:"11px",letterSpacing:".3em",background:"linear-gradient(90deg,#4a90d9,#a29bfe)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>DALAS GAMES</div>
+        <div style={{fontSize:"16px"}}>🎮</div>
       </div>
-      <div style={{fontSize:"62px",filter:"drop-shadow(0 0 40px #c9a84c)"}}>⚔️</div>
-      <div style={{textAlign:"center"}}>
-        <h1 style={{fontSize:"48px",fontWeight:"900",background:"linear-gradient(180deg,#f0d48a,#c9a84c)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:0,letterSpacing:".05em"}}>MAGIC</h1>
-        <h2 style={{fontSize:"13px",fontWeight:"400",letterSpacing:".5em",color:"#4a3a1a",margin:"4px 0 0",textTransform:"uppercase"}}>The Gathering — Multiplayer</h2>
+
+      <div style={{display:"flex",alignItems:"center",gap:"10px",flexShrink:0}}>
+        <div style={{fontSize:"32px",filter:"drop-shadow(0 0 20px #c9a84c)"}}>⚔️</div>
+        <div>
+          <h1 style={{fontSize:"32px",fontWeight:"900",background:"linear-gradient(180deg,#f0d48a,#c9a84c)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:0,letterSpacing:".05em"}}>MAGIC</h1>
+          <div style={{fontSize:"9px",letterSpacing:".4em",color:"#4a3a1a",textTransform:"uppercase"}}>The Gathering — Multiplayer</div>
+        </div>
       </div>
+
+      {/* Nome */}
       <input value={name} onChange={e=>setName(e.target.value)} placeholder="Seu nome de mago..."
-        style={{background:"rgba(0,0,0,.6)",border:"1px solid #241808",borderRadius:"7px",padding:"11px 18px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"14px",width:"300px",outline:"none",textAlign:"center"}}/>
-      <div>
-        <div style={{textAlign:"center",fontSize:"10px",color:"#4a3a18",letterSpacing:".15em",marginBottom:"10px"}}>ESCOLHA SUAS CORES (1–3)</div>
-        <div style={{display:"flex",gap:"10px",justifyContent:"center"}}>
+        style={{background:"rgba(0,0,0,.6)",border:"1px solid #241808",borderRadius:"7px",padding:"9px 14px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"13px",width:"100%",maxWidth:"320px",outline:"none",textAlign:"center",flexShrink:0}}/>
+
+      {/* Cores */}
+      <div style={{flexShrink:0,textAlign:"center"}}>
+        <div style={{fontSize:"9px",color:"#4a3a18",letterSpacing:".15em",marginBottom:"6px"}}>ESCOLHA SUAS CORES (1–3)</div>
+        <div style={{display:"flex",gap:"6px",justifyContent:"center"}}>
           {cls.map(c=>{const sel=colors.includes(c.k);const st=COLOR_STYLES[c.k];return(
-            <div key={c.k} onClick={()=>tog(c.k)} style={{width:"62px",padding:"10px 6px",borderRadius:"8px",textAlign:"center",cursor:"pointer",background:sel?st.bg:"rgba(0,0,0,.4)",border:`2px solid ${sel?st.border:"#101014"}`,transform:sel?"scale(1.1)":"scale(1)",transition:"all .2s",boxShadow:sel?`0 0 16px ${st.border}50`:"none"}}>
-              <div style={{fontSize:"26px"}}>{c.e}</div>
-              <div style={{fontSize:"9px",color:sel?st.text:"#2a2a38",marginTop:"4px",fontWeight:"600"}}>{c.n}</div>
+            <div key={c.k} onClick={()=>tog(c.k)} style={{width:"52px",padding:"7px 4px",borderRadius:"8px",textAlign:"center",cursor:"pointer",background:sel?st.bg:"rgba(0,0,0,.4)",border:`2px solid ${sel?st.border:"#101014"}`,transform:sel?"scale(1.08)":"scale(1)",transition:"all .2s",boxShadow:sel?`0 0 12px ${st.border}50`:"none"}}>
+              <div style={{fontSize:"22px"}}>{c.e}</div>
+              <div style={{fontSize:"8px",color:sel?st.text:"#2a2a38",marginTop:"3px",fontWeight:"600"}}>{c.n}</div>
             </div>);
           })}
         </div>
       </div>
-      {error&&<div style={{color:"#ff8888",fontSize:"12px",background:"rgba(50,0,0,.5)",padding:"7px 14px",borderRadius:"5px",border:"1px solid #703030"}}>{error}</div>}
-      <div style={{display:"flex",gap:"12px",flexWrap:"wrap",justifyContent:"center"}}>
-        <button onClick={onCreate} disabled={colors.length===0||!name.trim()} style={{background:"linear-gradient(135deg,#081804,#163c0c)",border:"2px solid #347020",color:"#68c040",padding:"13px 30px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"14px",letterSpacing:".08em",opacity:colors.length===0||!name.trim()?0.3:1}}>🏰 Criar Sala</button>
-        <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+
+      {error&&<div style={{color:"#ff8888",fontSize:"11px",background:"rgba(50,0,0,.5)",padding:"5px 12px",borderRadius:"5px",border:"1px solid #703030",flexShrink:0}}>{error}</div>}
+
+      {/* Botões multiplayer */}
+      <div style={{display:"flex",gap:"8px",flexWrap:"wrap",justifyContent:"center",flexShrink:0}}>
+        <button onClick={onCreate} disabled={!ok} style={{background:"linear-gradient(135deg,#081804,#163c0c)",border:"2px solid #347020",color:"#68c040",padding:"10px 22px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",opacity:ok?1:0.3}}>🏰 Criar Sala</button>
+        <div style={{display:"flex",gap:"5px",alignItems:"center"}}>
           <input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="CÓDIGO" maxLength={5}
-            style={{background:"rgba(0,0,0,.6)",border:"1px solid #201408",borderRadius:"7px",padding:"11px 12px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"16px",width:"108px",outline:"none",textAlign:"center",letterSpacing:".3em"}}/>
-          <button onClick={onJoin} disabled={!code.trim()||colors.length===0||!name.trim()} style={{background:"linear-gradient(135deg,#06041c,#10083a)",border:"2px solid #281898",color:"#5840d0",padding:"11px 20px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"14px",opacity:!code.trim()||colors.length===0||!name.trim()?0.3:1}}>⚡ Entrar</button>
+            style={{background:"rgba(0,0,0,.6)",border:"1px solid #201408",borderRadius:"7px",padding:"9px 10px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"14px",width:"95px",outline:"none",textAlign:"center",letterSpacing:".3em"}}/>
+          <button onClick={onJoin} disabled={!code.trim()||!ok} style={{background:"linear-gradient(135deg,#06041c,#10083a)",border:"2px solid #281898",color:"#5840d0",padding:"9px 16px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",opacity:!code.trim()||!ok?0.3:1}}>⚡ Entrar</button>
         </div>
       </div>
-      <div style={{width:"100%",maxWidth:"360px",borderTop:"1px solid #1a1208",paddingTop:"16px",display:"flex",flexDirection:"column",alignItems:"center",gap:"8px"}}>
-        <div style={{fontSize:"10px",color:"#3a2a12",letterSpacing:".2em"}}>— MODO SINGLEPLAYER —</div>
-        <button onClick={onVsBot} disabled={colors.length===0||!name.trim()} style={{background:"linear-gradient(135deg,#1a0a20,#3a1050)",border:"2px solid #8a30c0",color:"#c060f0",padding:"13px 40px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"14px",letterSpacing:".08em",width:"100%",opacity:colors.length===0||!name.trim()?0.3:1}}>🤖 Jogar vs Computador</button>
+
+      {/* VS Bot */}
+      <div style={{width:"100%",maxWidth:"320px",borderTop:"1px solid #1a1208",paddingTop:"10px",display:"flex",flexDirection:"column",alignItems:"center",gap:"6px",flexShrink:0}}>
+        <div style={{fontSize:"9px",color:"#3a2a12",letterSpacing:".2em"}}>— MODO SINGLEPLAYER —</div>
+        <button onClick={onVsBot} disabled={!ok} style={{background:"linear-gradient(135deg,#1a0a20,#3a1050)",border:"2px solid #8a30c0",color:"#c060f0",padding:"10px 30px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",width:"100%",opacity:ok?1:0.3}}>🤖 Jogar vs Computador</button>
       </div>
     </div>
   );
@@ -667,48 +681,47 @@ function DifficultyScreen({name,setName,colors,setColors,error,onStart,onBack}) 
   const cls=[{k:"W",e:"☀️",n:"Branco"},{k:"U",e:"💧",n:"Azul"},{k:"B",e:"💀",n:"Preto"},{k:"R",e:"🔥",n:"Vermelho"},{k:"G",e:"🌿",n:"Verde"}];
   const tog=k=>setColors(s=>s.includes(k)?s.filter(x=>x!==k):[...s,k]);
   const difficulties = [
-    { id:"random", icon:"🎲", name:"Aleatório",   desc:"Joga cartas e ataca sem estratégia. Bom para aprender.",  color:"#55efc4", bg:"#031a12" },
-    { id:"basic",  icon:"📚", name:"Básico",      desc:"Usa mana eficientemente e ataca quando tem vantagem.",     color:"#74b9ff", bg:"#010c20" },
-    { id:"medium", icon:"🌑", name:"Médio",       desc:"Considera bloqueios, remoções e prioridades de ameaças.",  color:"#a29bfe", bg:"#08031a" },
-    { id:"hard",   icon:"💀", name:"Difícil",     desc:"Avalia o estado do jogo. Busca combinações letais.",       color:"#e17055", bg:"#1a0501" },
+    { id:"random", icon:"🎲", name:"Aleatório",   desc:"Joga sem estratégia. Bom para aprender.",  color:"#55efc4", bg:"#031a12" },
+    { id:"basic",  icon:"📚", name:"Básico",      desc:"Usa mana e ataca quando tem vantagem.",     color:"#74b9ff", bg:"#010c20" },
+    { id:"medium", icon:"🌑", name:"Médio",       desc:"Considera bloqueios e ameaças.",            color:"#a29bfe", bg:"#08031a" },
+    { id:"hard",   icon:"💀", name:"Difícil",     desc:"Busca combinações letais.",                 color:"#e17055", bg:"#1a0501" },
   ];
+  const ok = name.trim() && colors.length>0;
   return (
-    <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 40%,#0c0820,#03020f)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",gap:"20px",padding:"20px"}}>
+    <div style={{position:"fixed",inset:0,background:"radial-gradient(ellipse at 50% 40%,#0c0820,#03020f)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",overflowY:"auto",padding:"10px 16px",gap:"10px"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap'); @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
-      <button onClick={onBack} style={{position:"absolute",top:"20px",left:"20px",background:"none",border:"1px solid #2a1a08",color:"#6a5a38",padding:"6px 14px",borderRadius:"5px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"12px"}}>← Voltar</button>
-      <div style={{fontSize:"52px",filter:"drop-shadow(0 0 30px #8a30c0)"}}>🤖</div>
-      <div style={{textAlign:"center"}}>
-        <h1 style={{fontSize:"32px",fontWeight:"900",background:"linear-gradient(180deg,#c060f0,#8a30c0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:0}}>VS COMPUTADOR</h1>
-        <p style={{fontSize:"11px",color:"#4a3a5a",letterSpacing:".2em",margin:"6px 0 0"}}>ESCOLHA A DIFICULDADE</p>
+      <div style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",maxWidth:"400px",flexShrink:0}}>
+        <button onClick={onBack} style={{background:"none",border:"1px solid #2a1a08",color:"#6a5a38",padding:"5px 12px",borderRadius:"5px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"11px"}}>← Voltar</button>
+        <div style={{flex:1,textAlign:"center"}}>
+          <span style={{fontSize:"20px"}}>🤖</span>
+          <span style={{fontSize:"16px",fontWeight:"900",background:"linear-gradient(180deg,#c060f0,#8a30c0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginLeft:"8px"}}>VS COMPUTADOR</span>
+        </div>
       </div>
-      {/* Nome */}
       <input value={name} onChange={e=>setName(e.target.value)} placeholder="Seu nome de mago..."
-        style={{background:"rgba(0,0,0,.6)",border:"1px solid #2a1030",borderRadius:"7px",padding:"10px 18px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"14px",width:"280px",outline:"none",textAlign:"center"}}/>
-      {/* Cores */}
-      <div>
-        <div style={{textAlign:"center",fontSize:"10px",color:"#4a3a18",letterSpacing:".15em",marginBottom:"8px"}}>SUAS CORES</div>
-        <div style={{display:"flex",gap:"8px",justifyContent:"center"}}>
+        style={{background:"rgba(0,0,0,.6)",border:"1px solid #2a1030",borderRadius:"7px",padding:"8px 14px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"13px",width:"100%",maxWidth:"320px",outline:"none",textAlign:"center",flexShrink:0}}/>
+      <div style={{flexShrink:0}}>
+        <div style={{textAlign:"center",fontSize:"9px",color:"#4a3a18",letterSpacing:".15em",marginBottom:"6px"}}>SUAS CORES</div>
+        <div style={{display:"flex",gap:"6px",justifyContent:"center"}}>
           {cls.map(c=>{const sel=colors.includes(c.k);const st=COLOR_STYLES[c.k];return(
-            <div key={c.k} onClick={()=>tog(c.k)} style={{width:"52px",padding:"8px 4px",borderRadius:"8px",textAlign:"center",cursor:"pointer",background:sel?st.bg:"rgba(0,0,0,.4)",border:`2px solid ${sel?st.border:"#101014"}`,transform:sel?"scale(1.1)":"scale(1)",transition:"all .2s"}}>
-              <div style={{fontSize:"22px"}}>{c.e}</div>
-              <div style={{fontSize:"8px",color:sel?st.text:"#2a2a38",marginTop:"3px",fontWeight:"600"}}>{c.n}</div>
+            <div key={c.k} onClick={()=>tog(c.k)} style={{width:"48px",padding:"6px 4px",borderRadius:"7px",textAlign:"center",cursor:"pointer",background:sel?st.bg:"rgba(0,0,0,.4)",border:`2px solid ${sel?st.border:"#101014"}`,transform:sel?"scale(1.08)":"scale(1)",transition:"all .2s"}}>
+              <div style={{fontSize:"20px"}}>{c.e}</div>
+              <div style={{fontSize:"8px",color:sel?st.text:"#2a2a38",marginTop:"2px",fontWeight:"600"}}>{c.n}</div>
             </div>);})}
         </div>
       </div>
-      {/* Dificuldades */}
-      <div style={{display:"flex",flexDirection:"column",gap:"10px",width:"100%",maxWidth:"400px"}}>
+      <div style={{display:"flex",flexDirection:"column",gap:"7px",width:"100%",maxWidth:"400px",flexShrink:0}}>
         {difficulties.map(d=>(
-          <button key={d.id} onClick={()=>onStart(d.id)} disabled={!name.trim()||colors.length===0}
-            style={{background:`linear-gradient(135deg,${d.bg},rgba(0,0,0,.8))`,border:`2px solid ${d.color}`,color:d.color,padding:"14px 20px",borderRadius:"10px",cursor:"pointer",fontFamily:"'Cinzel',serif",textAlign:"left",display:"flex",alignItems:"center",gap:"14px",transition:"all .2s",opacity:!name.trim()||colors.length===0?0.3:1}}>
-            <span style={{fontSize:"28px"}}>{d.icon}</span>
+          <button key={d.id} onClick={()=>onStart(d.id)} disabled={!ok}
+            style={{background:`linear-gradient(135deg,${d.bg},rgba(0,0,0,.8))`,border:`2px solid ${d.color}`,color:d.color,padding:"10px 16px",borderRadius:"9px",cursor:"pointer",fontFamily:"'Cinzel',serif",textAlign:"left",display:"flex",alignItems:"center",gap:"12px",opacity:ok?1:0.3}}>
+            <span style={{fontSize:"22px"}}>{d.icon}</span>
             <div>
-              <div style={{fontSize:"14px",fontWeight:"700",letterSpacing:".08em"}}>{d.name}</div>
-              <div style={{fontSize:"10px",color:"rgba(255,255,255,.5)",marginTop:"3px",fontWeight:"400",fontFamily:"serif"}}>{d.desc}</div>
+              <div style={{fontSize:"13px",fontWeight:"700"}}>{d.name}</div>
+              <div style={{fontSize:"9px",color:"rgba(255,255,255,.5)",marginTop:"2px",fontFamily:"serif"}}>{d.desc}</div>
             </div>
           </button>
         ))}
       </div>
-      {error&&<div style={{color:"#ff8888",fontSize:"12px"}}>{error}</div>}
+      {error&&<div style={{color:"#ff8888",fontSize:"11px",flexShrink:0}}>{error}</div>}
     </div>
   );
 }
