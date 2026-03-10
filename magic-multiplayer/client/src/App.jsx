@@ -147,24 +147,34 @@ const CARD_PT = {
 };
 
 const ABILITY_PT = {
-  flying:       "🦅 Voar",
-  vigilance:    "👁️ Vigilância",
-  first_strike: "⚡ Ataque Duplo",
-  haste:        "💨 Ímpeto",
-  trample:      "🐾 Atropelar",
-  tap_mana:     "🌿 Produz Mana",
-};
+  flying:           "🦅 Voar",
+  trample:          "🐾 Atropelar",
+  haste:            "⚡ Ímpeto",
+  vigilance:        "👁️ Vigilância",
+  first_strike:     "🗡️ Ataque Duplo",
+  protection_black: "🛡️ Proteção contra Preto",
+  protection_red:   "🛡️ Proteção contra Vermelho",
+  protection_white: "🛡️ Proteção contra Branco",
+  protection_blue:  "🛡️ Proteção contra Azul",
+  protection_green: "🛡️ Proteção contra Verde",
+  tap_mana:         "🌿 Toque: Produza 1 mana verde",
+  upkeep_sacrifice: "🦇 Manutenção: Sacrifique uma criatura ou perca 7 de vida",
+  upkeep_pay_4G:    "🌿 Manutenção: Pague GGGG ou receba 8 de dano",
+  pump_R:           "🔥 Ative: Gaste R → +1/+0 até fim do turno",
+  cant_block:       "⚔️ Não pode bloquear",
+  discard_on_damage:"👻 Ao causar dano: oponente descarta uma carta aleatória",
 
 const EFFECT_PT = {
   destroy_all_creatures: "💥 Destrói todas as criaturas.",
   exile_creature:        "✨ Exila uma criatura alvo.",
   destroy_creature:      "☠️ Destrói uma criatura alvo.",
-  deal_3_damage:         "⚡ Causa 3 pontos de dano a qualquer alvo.",
-  deal_4_damage:         "🔥 Causa 4 pontos de dano a qualquer alvo.",
+  deal_3_damage:         "⚡ Causa 3 pontos de dano a qualquer alvo (criatura ou jogador).",
+  deal_4_damage:         "🔥 Causa 4 pontos de dano a qualquer alvo (criatura ou jogador).",
+  deal_x_damage:         "🔥 Causa X de dano (gaste todo o mana restante como X).",
   draw_3:                "🧠 Compre 3 cartas.",
-  add_3_black_mana:      "💀 Adicione 3 manas pretos à sua reserva.",
+  add_3_black_mana:      "💀 Adicione BBB à sua reserva de mana.",
   pump_creature:         "💪 Criatura alvo recebe +3/+3 até o fim do turno.",
-  counter_spell:         "🌊 Contramagica um feitiço alvo.",
+  counter_spell:         "🌊 Contramagica — cancela uma mágica alvo (não implementado no jogo).",
 };
 
 const MANA_NOME = { W:"Branco", U:"Azul", B:"Preto", R:"Vermelho", G:"Verde" };
@@ -304,31 +314,55 @@ export default function App() {
     return Object.values(pool).reduce((a,b)=>a+b,0)>=gen;
   };
 
+  const isVsBot = gs && gs.isBot;
+  const canPlayInstant = (card) => card.type === "instant" && affordable(card);
+
+  const getTargetMode = (card) => {
+    const t = card.targeting;
+    if (!t) {
+      // Inferir pelo effect se não tiver targeting explícito
+      if (card.effect === "pump_creature") return "my";
+      if (["deal_3_damage","deal_x_damage"].includes(card.effect)) return "any";
+      if (["destroy_creature","exile_creature"].includes(card.effect)) return "opp";
+      return null;
+    }
+    if (t === "any") return "any";
+    if (t === "opp_creature" || t === "opp_creature_nonblack") return "opp";
+    if (t === "my_creature") return "my";
+    return "opp";
+  };
+
   const clickHand = (card) => {
-    if (!isMy) return;
+    if (!isMy && !(isVsBot && canPlayInstant(card))) return;
     if (isMobile) { setCardPopup({card, from:"hand"}); return; }
     if (card.type==="land") { if (["main1","main2"].includes(step)) emit("play_land",{cardUid:card.uid}); return; }
-    if (!["main1","main2","combat"].includes(step)) return;
+    if (!isMy && !canPlayInstant(card)) return;
+    if (isMy && !["main1","main2","combat"].includes(step) && card.type!=="instant") return;
     if (!affordable(card)) { showError("Mana insuficiente!"); return; }
-    const needs = card.effect && ["destroy_creature","exile_creature","deal_3_damage","deal_4_damage","pump_creature"].includes(card.effect);
-    if (needs) { setSelCard(card.uid); setTargetMode(card.effect==="pump_creature"?"my":"opp"); }
+    const tMode = getTargetMode(card);
+    if (tMode) { setSelCard(card.uid); setTargetMode(tMode); }
     else emit("cast_card",{cardUid:card.uid});
   };
 
   const playCardFromPopup = (card) => {
     setCardPopup(null);
     if (card.type==="land") { if (["main1","main2"].includes(step)) emit("play_land",{cardUid:card.uid}); return; }
-    if (!["main1","main2","combat"].includes(step)) return;
+    if (!isMy && !canPlayInstant(card)) return;
+    if (isMy && !["main1","main2","combat"].includes(step) && card.type!=="instant") return;
     if (!affordable(card)) { showError("Mana insuficiente!"); return; }
-    const needs = card.effect && ["destroy_creature","exile_creature","deal_3_damage","deal_4_damage","pump_creature"].includes(card.effect);
-    if (needs) { setSelCard(card.uid); setTargetMode(card.effect==="pump_creature"?"my":"opp"); }
+    const tMode = getTargetMode(card);
+    if (tMode) { setSelCard(card.uid); setTargetMode(tMode); }
     else emit("cast_card",{cardUid:card.uid});
   };
 
   const clickCreature = (card, isOpp) => {
     // Se está no modo de selecionar alvo para feitiço
     if (selCard && targetMode) {
-      if ((targetMode==="opp"&&isOpp)||(targetMode==="my"&&!isOpp)) {
+      const canTarget =
+        (targetMode==="opp" && isOpp) ||
+        (targetMode==="any" && isOpp) ||    // "any" permite criatura oponente
+        (targetMode==="my" && !isOpp);
+      if (canTarget) {
         emit("cast_card",{cardUid:selCard,targetUid:card.uid});
         setSelCard(null); setTargetMode(null);
       }
@@ -337,6 +371,11 @@ export default function App() {
     // Llanowar Elves e tap_mana — só fora do combate
     if (isMy && !isOpp && card.abilities && card.abilities.includes("tap_mana") && !card.tapped && !card.summoningSick && cp !== "declare_attackers") {
       emit("tap_creature", {cardUid: card.uid});
+      return;
+    }
+    // Shivan Dragon pump_R — só no próprio turno
+    if (isMy && !isOpp && card.abilities && card.abilities.includes("pump_R") && (me.manaPool?.R||0) >= 1) {
+      emit("pump_creature_ability", {cardUid: card.uid});
       return;
     }
     // Selecionar atacante
@@ -432,12 +471,23 @@ export default function App() {
               {cardPopup.card.effect&&<div style={{fontSize:"10px",color:"#90b8d0",lineHeight:"1.4",background:"rgba(0,0,0,.4)",borderRadius:"5px",padding:"5px 7px",borderLeft:"2px solid #2a5070"}}>{EFFECT_PT[cardPopup.card.effect]||cardPopup.card.effect}</div>}
               {/* Botões de ação */}
               <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"4px"}}>
-                {cardPopup.from==="hand"&&isMy&&(
+                {cardPopup.from==="hand"&&(isMy||(isVsBot&&cardPopup.card.type==="instant"))&&(
                   affordable(cardPopup.card)
-                    ? <button onClick={()=>playCardFromPopup(cardPopup.card)} style={{background:"linear-gradient(135deg,#0a2008,#1a4010)",border:"2px solid #4ade80",color:"#4ade80",padding:"10px",borderRadius:"8px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",fontWeight:"700"}}>
-                        {cardPopup.card.type==="land"?"🌍 Jogar Terra":"✨ Lançar Carta"}
-                      </button>
+                    ? <>
+                        <button onClick={()=>playCardFromPopup(cardPopup.card)} style={{background:"linear-gradient(135deg,#0a2008,#1a4010)",border:"2px solid #4ade80",color:"#4ade80",padding:"10px",borderRadius:"8px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",fontWeight:"700"}}>
+                          {cardPopup.card.type==="land"?"🌍 Jogar Terra":"✨ Lançar (escolher alvo)"}
+                        </button>
+                        {/* Se targeting=any, também mostra botão de dano direto */}
+                        {cardPopup.card.targeting==="any"&&<button onClick={()=>{setCardPopup(null);if(!affordable(cardPopup.card)){showError("Mana insuficiente!");return;}emit("cast_card",{cardUid:cardPopup.card.uid,targetUid:"player"});}} style={{background:"linear-gradient(135deg,#300808,#500c0c)",border:"2px solid #e17055",color:"#ff8888",padding:"10px",borderRadius:"8px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",fontWeight:"700"}}>⚡ Dano Direto ao Jogador</button>}
+                      </>
                     : <div style={{fontSize:"11px",color:"#ff8888",textAlign:"center",padding:"8px",background:"rgba(80,0,0,.4)",borderRadius:"6px"}}>⚠️ Mana insuficiente</div>
+                )}
+                {/* Botões de habilidade para criaturas em campo */}
+                {cardPopup.from==="my"&&isMy&&(
+                  <>
+                    {(cardPopup.card.abilities||[]).includes("tap_mana")&&!cardPopup.card.tapped&&!cardPopup.card.summoningSick&&<button onClick={()=>{setCardPopup(null);emit("tap_creature",{cardUid:cardPopup.card.uid});}} style={{background:"linear-gradient(135deg,#0a2008,#1a4010)",border:"2px solid #4ade80",color:"#4ade80",padding:"10px",borderRadius:"8px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"12px"}}>🌿 Toque → +1 Mana Verde</button>}
+                    {(cardPopup.card.abilities||[]).includes("pump_R")&&(me.manaPool?.R||0)>=1&&<button onClick={()=>{setCardPopup(null);emit("pump_creature_ability",{cardUid:cardPopup.card.uid});}} style={{background:"linear-gradient(135deg,#200808,#501010)",border:"2px solid #e17055",color:"#ff9977",padding:"10px",borderRadius:"8px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"12px"}}>🔥 Ativar: +1/+0 (gasta R)</button>}
+                  </>
                 )}
                 <button onClick={()=>setCardPopup(null)} style={{background:"rgba(0,0,0,.5)",border:"1px solid #2a2a3a",color:"#8a8aaa",padding:"8px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"12px"}}>✕ Fechar</button>
               </div>
@@ -446,14 +496,14 @@ export default function App() {
         </div>
       )}
       <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"2px 8px",flexShrink:0}}>
-        <PBar player={opp} active={!isMy} />
+        <PBar player={opp} active={!isMy} onDirectDmg={targetMode==="any" ? ()=>{ emit("cast_card",{cardUid:selCard,targetUid:"player"}); setSelCard(null); setTargetMode(null); } : null} />
         <div style={{display:"flex",gap:"2px",marginBottom:"2px",justifyContent:"flex-end"}}>
           {opp.hand.map((_,i)=><div key={i} style={{width:"clamp(18px,3.5vw,28px)",height:"clamp(25px,5vh,38px)",borderRadius:"3px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
         </div>
         <div style={{display:"flex",gap:"3px",flexWrap:"nowrap",overflowX:"auto",minHeight:"clamp(48px,11vh,75px)",alignItems:"center",paddingBottom:"2px"}}>
           {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>isMobile&&setCardPopup({card:c,from:"opp"})} onHov={setHoveredDelayed} small/>)}
           {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"45px",background:"#0e1d2e",flexShrink:0}}/>}
-          {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"} onClick={()=>{ if(isMobile&&!selCard) setCardPopup({card:c,from:"opp"}); else clickCreature(c,true); }} onHov={setHoveredDelayed} small/>)}
+          {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"||targetMode==="any"} onClick={()=>{ if(isMobile&&!selCard) setCardPopup({card:c,from:"opp"}); else clickCreature(c,true); }} onHov={setHoveredDelayed} small/>)}
         </div>
       </div>
 
@@ -466,7 +516,11 @@ export default function App() {
           <Steps step={step} turn={gs.turn} tn={gs.turnNumber} mi={myIndex}/>
           <Mana pool={me.manaPool}/>
           {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"4px",padding:"2px 6px",fontSize:"9px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
-          {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"4px",padding:"2px 6px",fontSize:"9px",color:"#70c050",textAlign:"center"}}>🎯 Alvo {targetMode==="opp"?"inimigo":"aliado"}<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{marginLeft:"4px",background:"none",border:"none",color:"#ff8888",cursor:"pointer",fontSize:"10px"}}>✕</button></div>}
+          {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"4px",padding:"4px 6px",fontSize:"9px",color:"#70c050",textAlign:"center"}}>
+            🎯 {targetMode==="any"?"Clique numa criatura ou no ❤️ do oponente":targetMode==="my"?"Clique numa sua criatura":"Clique numa criatura inimiga"}
+            {targetMode==="any"&&<button onClick={()=>{emit("cast_card",{cardUid:selCard,targetUid:"player"});setSelCard(null);setTargetMode(null);}} style={{display:"block",width:"100%",marginTop:"4px",background:"linear-gradient(135deg,#300808,#500c0c)",border:"1px solid #e17055",color:"#ff8888",padding:"4px",borderRadius:"4px",cursor:"pointer",fontSize:"9px",fontFamily:"'Cinzel',serif"}}>⚡ Atacar Jogador Diretamente</button>}
+            <button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{display:"block",width:"100%",marginTop:"3px",background:"none",border:"none",color:"#ff6666",cursor:"pointer",fontSize:"9px"}}>✕ Cancelar</button>
+          </div>}
           <div style={{display:"flex",flexDirection:"column",gap:"3px"}}>
             {isMy&&!cp&&<>
               {step==="untap"&&<button style={btn("#74b9ff","#030c18",true)} onClick={()=>emit("advance_step")}>🔄 Desvirar</button>}
@@ -497,7 +551,10 @@ export default function App() {
           <div style={{width:"1px",height:"24px",background:"#1a2a3a",flexShrink:0}}/>
           <div style={{display:"flex",gap:"5px",alignItems:"center"}}>
             {error&&<div style={{fontSize:"9px",color:"#ff8888",padding:"2px 5px",background:"rgba(80,0,0,.5)",borderRadius:"4px",maxWidth:"90px"}}>{error}</div>}
-            {selCard&&targetMode&&<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{background:"rgba(80,0,0,.5)",border:"1px solid #ff4444",color:"#ff8888",padding:"7px 10px",borderRadius:"6px",cursor:"pointer",fontSize:"12px"}}>✕</button>}
+            {selCard&&targetMode&&<>
+              {targetMode==="any"&&<button onClick={()=>{emit("cast_card",{cardUid:selCard,targetUid:"player"});setSelCard(null);setTargetMode(null);}} style={{background:"linear-gradient(135deg,#300808,#500c0c)",border:"1px solid #e17055",color:"#ff8888",padding:"7px 10px",borderRadius:"6px",cursor:"pointer",fontSize:"11px",fontFamily:"'Cinzel',serif"}}>⚡ Jogador</button>}
+              <button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{background:"rgba(80,0,0,.5)",border:"1px solid #ff4444",color:"#ff8888",padding:"7px 10px",borderRadius:"6px",cursor:"pointer",fontSize:"12px"}}>✕</button>
+            </>}
             {isMy&&!cp&&<>
               {step==="untap"&&<button style={{...btn("#74b9ff","#030c18",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>🔄</button>}
               {step==="upkeep"&&<button style={{...btn("#a29bfe","#080318",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>⬆️</button>}
@@ -533,7 +590,7 @@ export default function App() {
       {/* ── HAND ── */}
       <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"4px 8px 6px",flexShrink:0}} onMouseLeave={()=>setHoveredDelayed(null)}>
         <div style={{display:"flex",gap:"4px",overflowX:"auto",alignItems:"center",paddingBottom:"2px"}}>
-          {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed} mobile={isMobile}/>)}
+          {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy || (isVsBot && card.type==="instant")} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed} mobile={isMobile}/>)}
           {me.hand.length===0&&<div style={{color:"#151008",fontSize:"11px",padding:"16px",fontStyle:"italic"}}>Sem cartas na mão</div>}
         </div>
       </div>
@@ -561,15 +618,21 @@ export default function App() {
 }
 
 // ── Player Bar ──
-function PBar({player,active,compact}) {
+function PBar({player,active,compact,onDirectDmg}) {
   const lc = player.life>10?"#4ade80":player.life>5?"#facc15":"#f87171";
+  const isDmgTarget = !!onDirectDmg;
   return (
-    <div style={{display:"flex",alignItems:"center",gap:"10px",padding:compact?"1px 0":"3px 0"}}>
+    <div onClick={onDirectDmg||undefined}
+      style={{display:"flex",alignItems:"center",gap:"10px",padding:compact?"1px 0":"3px 0",
+        cursor:isDmgTarget?"crosshair":"default",
+        outline:isDmgTarget?"2px solid #ff6644":"none",outlineOffset:"3px",
+        borderRadius:"6px",transition:"outline .2s"}}>
       <div style={{fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:compact?"11px":"13px",color:active?"#f0d48a":"#3a2a12",minWidth:"95px",transition:"color .3s"}}>
         {active&&<span style={{color:"#4ade80",marginRight:"5px",animation:"pulse 1s infinite"}}>●</span>}{player.name}
+        {isDmgTarget&&<span style={{marginLeft:"6px",fontSize:"11px",color:"#ff6644",animation:"pulse 1s infinite"}}>🎯</span>}
       </div>
-      <div style={{background:"rgba(0,0,0,.6)",border:`1.5px solid ${lc}`,borderRadius:"7px",padding:"2px 10px",display:"flex",alignItems:"center",gap:"4px",boxShadow:`0 0 10px ${lc}30`}}>
-        <span>❤️</span><span style={{color:lc,fontWeight:"bold",fontSize:"16px",fontFamily:"'Cinzel',serif"}}>{player.life}</span>
+      <div style={{background:"rgba(0,0,0,.6)",border:`1.5px solid ${isDmgTarget?"#ff6644":lc}`,borderRadius:"7px",padding:"2px 10px",display:"flex",alignItems:"center",gap:"4px",boxShadow:`0 0 10px ${isDmgTarget?"#ff664440":lc+"30"}`}}>
+        <span>❤️</span><span style={{color:isDmgTarget?"#ff8844":lc,fontWeight:"bold",fontSize:"16px",fontFamily:"'Cinzel',serif"}}>{player.life}</span>
       </div>
     </div>
   );
