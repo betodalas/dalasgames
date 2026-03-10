@@ -397,90 +397,75 @@ export default function App() {
       )}
 
       {/* ── OPPONENT ── */}
-      <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"4px 16px",flexShrink:0}}>
+      <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"2px 10px",flexShrink:0}}>
         <PBar player={opp} active={!isMy} />
-        <div style={{display:"flex",gap:"3px",marginBottom:"3px",justifyContent:"flex-end"}}>
-          {opp.hand.map((_,i)=><div key={i} style={{width:"30px",height:"42px",borderRadius:"5px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
+        <div style={{display:"flex",gap:"3px",marginBottom:"2px",justifyContent:"flex-end"}}>
+          {opp.hand.map((_,i)=><div key={i} style={{width:"clamp(20px,4vw,30px)",height:"clamp(28px,5.5vh,42px)",borderRadius:"4px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
         </div>
-        <div style={{display:"flex",gap:"4px",flexWrap:"nowrap",overflowX:"auto",minHeight:"68px",alignItems:"center",paddingBottom:"2px"}}>
+        <div style={{display:"flex",gap:"3px",flexWrap:"nowrap",overflowX:"auto",minHeight:"clamp(50px,12vh,80px)",alignItems:"center",paddingBottom:"2px"}}>
           {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{}} onHov={setHoveredDelayed} small/>)}
-          {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"60px",background:"#0e1d2e",flexShrink:0}}/>}
+          {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"50px",background:"#0e1d2e",flexShrink:0}}/>}
           {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"} onClick={()=>clickCreature(c,true)} onHov={setHoveredDelayed} small/>)}
         </div>
       </div>
 
       {/* ── CENTER ── */}
-      <div style={{flex:1,display:"flex",gap:"8px",padding:"4px 16px",background:"radial-gradient(ellipse at center,#08130a,#030604)",borderTop:"1px solid #0c1a0e",borderBottom:"1px solid #0c1a0e",minHeight:0,overflow:"hidden",alignItems:"stretch"}}>
+      <div style={{flex:1,display:"flex",gap:"6px",padding:"3px 10px",background:"radial-gradient(ellipse at center,#08130a,#030604)",minHeight:0,overflow:"hidden",alignItems:"stretch"}}>
         {/* My creatures */}
-        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:"6px",alignItems:"center",justifyContent:"center",overflowY:"auto"}}>
+        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:"4px",alignItems:"center",justifyContent:"center",overflowY:"auto"}}>
           {me.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="my"} onClick={()=>clickCreature(c,false)} onHov={setHoveredDelayed}/>)}
         </div>
         {/* Panel */}
-        <div style={{width:"225px",flexShrink:0,display:"flex",flexDirection:"column",gap:"4px",justifyContent:"center",overflowY:"auto"}}>
+        <div style={{width:"clamp(160px,28vw,225px)",flexShrink:0,display:"flex",flexDirection:"column",gap:"3px",justifyContent:"center",overflowY:"auto"}}>
           <Steps step={step} turn={gs.turn} tn={gs.turnNumber} mi={myIndex}/>
           <Mana pool={me.manaPool}/>
-          {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"5px",padding:"3px 7px",fontSize:"10px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
-          {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"5px",padding:"3px 7px",fontSize:"10px",color:"#70c050",textAlign:"center",animation:"pulse 1s infinite"}}>🎯 Clique no alvo {targetMode==="opp"?"inimigo":"aliado"}<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{marginLeft:"6px",background:"none",border:"none",color:"#ff8888",cursor:"pointer",fontSize:"11px"}}>✕</button></div>}
+          {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"4px",padding:"2px 6px",fontSize:"9px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
+          {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"4px",padding:"2px 6px",fontSize:"9px",color:"#70c050",textAlign:"center"}}>🎯 Alvo {targetMode==="opp"?"inimigo":"aliado"}<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{marginLeft:"4px",background:"none",border:"none",color:"#ff8888",cursor:"pointer",fontSize:"10px"}}>✕</button></div>}
           <div style={{display:"flex",flexDirection:"column",gap:"3px"}}>
             {isMy&&!cp&&<>
-              {step==="untap"&&<>
-                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Suas permanentes desviram automaticamente.</div>
-                <button style={btn("#74b9ff","#030c18",true)} onClick={()=>emit("advance_step")}>🔄 Confirmar Desvirar</button>
-              </>}
-              {step==="upkeep"&&<>
-                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Efeitos do início do turno. Clique para continuar.</div>
-                <button style={btn("#a29bfe","#080318",true)} onClick={()=>emit("advance_step")}>⬆️ Confirmar Manutenção</button>
-              </>}
-              {step==="draw"&&<>
-                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Compre uma carta do seu deck.</div>
-                <button style={btn("#55efc4","#031208",true)} onClick={()=>emit("draw_card")}>📖 Comprar Carta</button>
-              </>}
+              {step==="untap"&&<button style={btn("#74b9ff","#030c18",true)} onClick={()=>emit("advance_step")}>🔄 Desvirar</button>}
+              {step==="upkeep"&&<button style={btn("#a29bfe","#080318",true)} onClick={()=>emit("advance_step")}>⬆️ Manutenção</button>}
+              {step==="draw"&&<button style={btn("#55efc4","#031208",true)} onClick={()=>emit("draw_card")}>📖 Comprar</button>}
               {step==="main1"&&<>
-                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Jogue terrenos, invoque criaturas e lance feitiços.</div>
-                <button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>⚔️ Ir para Combate</button>
-                <button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar Turno (sem atacar)</button>
+                <button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>⚔️ Combate</button>
+                <button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar</button>
               </>}
               {step==="main2"&&<>
-                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Fase pós-combate. Lance mais feitiços se quiser.</div>
-                <button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>🌙 Ir para Fim de Turno</button>
-                <button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar Turno</button>
+                <button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>🌙 Fim</button>
+                <button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar</button>
               </>}
-              {step==="end"&&<>
-                <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Fim do turno. Passa para o oponente.</div>
-                <button style={btn("#636e72","#0a0b0c",true)} onClick={()=>emit("advance_step")}>→ Passar para o Oponente</button>
-              </>}
+              {step==="end"&&<button style={btn("#636e72","#0a0b0c",true)} onClick={()=>emit("advance_step")}>→ Oponente</button>}
             </>}
             {isMy&&cp==="declare_attackers"&&<>
-              <div style={{fontSize:"9px",color:"#4a6a8a",textAlign:"center"}}>Clique nas suas criaturas para atacar, depois confirme.</div>
-              <div style={{fontSize:"10px",color:"#e17055",textAlign:"center",background:"rgba(80,20,0,.5)",border:"1px solid #e17055",borderRadius:"5px",padding:"3px 7px"}}>{atks.length>0?`⚔️ ${atks.length} criatura(s) pronta(s)`:"🛡️ Nenhuma selecionada"}</div>
-              <button style={{...btn("#e17055","#150601",true),animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️ {atks.length>0?`Atacar com ${atks.length}`:"Pular Ataque"}</button>
+              <div style={{fontSize:"9px",color:"#e17055",textAlign:"center"}}>{atks.length>0?`⚔️ ${atks.length} atacante(s)`:"🛡️ Sem ataque"}</div>
+              <button style={{...btn("#e17055","#150601",true),animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️ {atks.length>0?`Atacar (${atks.length})`:"Pular"}</button>
             </>}
-            {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️ Confirmar Bloqueio</button>}
-            {!isMy&&!cp&&<div style={{fontSize:"10px",color:"#2a4a6a",fontStyle:"italic",textAlign:"center",animation:"pulse 2s infinite"}}>⏳ Aguardando oponente...</div>}
+            {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️ Bloquear</button>}
+            {!isMy&&!cp&&<div style={{fontSize:"9px",color:"#2a4a6a",fontStyle:"italic",textAlign:"center",animation:"pulse 2s infinite"}}>⏳ Aguardando...</div>}
           </div>
         </div>
-        {/* Log */}
-        <div ref={logRef} style={{width:"170px",flexShrink:0,overflowY:"auto",overflowX:"hidden",background:"rgba(0,0,0,.8)",border:"1px solid #121a22",borderRadius:"6px",padding:"5px 7px",fontSize:"9px",lineHeight:"1.6",alignSelf:"stretch"}}>
+        {/* Log — escondido em telas pequenas */}
+        <div ref={logRef} style={{width:"clamp(0px,18vw,160px)",flexShrink:0,overflowY:"auto",overflowX:"hidden",background:"rgba(0,0,0,.8)",border:"1px solid #121a22",borderRadius:"5px",padding:"4px 6px",fontSize:"8px",lineHeight:"1.5",alignSelf:"stretch",display:"clamp(0px,18vw,160px)"==="0px"?"none":"block"}}>
           {(gs.log||[]).map((l,i)=><div key={l.id||i} style={{color:logColor(l.type),marginBottom:"1px",wordBreak:"break-word"}}>{l.msg}</div>)}
         </div>
       </div>
 
       {/* ── MY LANDS ── */}
-      <div style={{background:"linear-gradient(0deg,#070e1c,#0b1626)",borderTop:"2px solid #0c1b2e",padding:"3px 16px",flexShrink:0}}>
-        <div style={{display:"flex",gap:"5px",alignItems:"center",flexWrap:"nowrap"}}>
+      <div style={{background:"linear-gradient(0deg,#070e1c,#0b1626)",borderTop:"2px solid #0c1b2e",padding:"2px 10px",flexShrink:0}}>
+        <div style={{display:"flex",gap:"4px",alignItems:"center",flexWrap:"nowrap"}}>
           <PBar player={me} active={isMy} compact/>
-          <div style={{display:"flex",gap:"3px",flexWrap:"nowrap",marginLeft:"6px",overflowX:"auto",flex:1,alignItems:"center"}}>
+          <div style={{display:"flex",gap:"3px",flexWrap:"nowrap",marginLeft:"5px",overflowX:"auto",flex:1,alignItems:"center"}}>
             {me.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{if(isMy)emit("tap_land",{cardUid:c.uid});}} onHov={setHoveredDelayed} small/>)}
           </div>
-          <div style={{flexShrink:0,fontSize:"9px",color:"#2a3a4a"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0} {me.hand?.length>7&&<span style={{color:"#ff8888",fontWeight:"bold"}}>✋{me.hand.length}/7!</span>}</div>
+          <div style={{flexShrink:0,fontSize:"8px",color:"#2a3a4a",whiteSpace:"nowrap"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0} {me.hand?.length>7&&<span style={{color:"#ff8888",fontWeight:"bold"}}>✋{me.hand.length}/7!</span>}</div>
         </div>
       </div>
 
       {/* ── HAND ── */}
-      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"6px 16px 8px",flexShrink:0,overflow:"hidden"}} onMouseLeave={()=>setHoveredDelayed(null)}>
-        <div style={{display:"flex",gap:"5px",overflowX:"auto",alignItems:"flex-end",paddingBottom:"4px"}}>
+      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"4px 10px 6px",flexShrink:0,overflow:"hidden"}} onMouseLeave={()=>setHoveredDelayed(null)}>
+        <div style={{display:"flex",gap:"4px",overflowX:"auto",alignItems:"flex-end",paddingBottom:"3px"}}>
           {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed}/>)}
-          {me.hand.length===0&&<div style={{color:"#151008",fontSize:"12px",padding:"20px",fontStyle:"italic"}}>Sem cartas na mão</div>}
+          {me.hand.length===0&&<div style={{color:"#151008",fontSize:"11px",padding:"16px",fontStyle:"italic"}}>Sem cartas na mão</div>}
         </div>
       </div>
 
@@ -575,12 +560,12 @@ function Steps({step, turn, tn, mi}) {
 function BCard({card,atk,blk,tgt,onClick,onHov,small=false}) {
   if(card.hidden) return null;
   const st=getCardStyle(card);
-  const w = small ? 62 : 86;
-  const h = small ? 87 : 120;
+  const w = small ? "clamp(44px,9vw,62px)" : "clamp(62px,11vw,86px)";
+  const h = small ? "clamp(62px,13vh,87px)" : "clamp(87px,18vh,120px)";
   return (
     <div className="bcard" onClick={onClick}
       onMouseEnter={()=>onHov&&onHov(card)} onMouseLeave={()=>onHov&&onHov(null)}
-      style={{width:`${w}px`,height:`${h}px`,borderRadius:"7px",background:st.bg,border:`2px solid ${atk?"#e17055":blk?"#74b9ff":tgt?"#55efc4":st.border}`,
+      style={{width:w,height:h,minWidth:w,borderRadius:"7px",background:st.bg,border:`2px solid ${atk?"#e17055":blk?"#74b9ff":tgt?"#55efc4":st.border}`,
         boxShadow:atk?"0 0 20px #e17055":blk?"0 0 20px #74b9ff":tgt?"0 0 16px #55efc4":"0 4px 14px rgba(0,0,0,.85)",
         cursor:"pointer",transform:card.tapped?"rotate(90deg)":"none",transition:"transform .3s,box-shadow .2s,border-color .2s",
         flexShrink:0,position:"relative",filter:card.summoningSick?"brightness(.55)":"none",overflow:"hidden",
@@ -601,7 +586,7 @@ function HCard({card,sel,can,myTurn,step,onClick,onHov}) {
   return (
     <div className="hcard" onClick={onClick}
       onMouseEnter={()=>onHov&&onHov(card)} onMouseLeave={()=>onHov&&onHov(null)}
-      style={{minWidth:"116px",maxWidth:"116px",height:"162px",borderRadius:"10px",background:st.bg,
+      style={{minWidth:"min(116px,22vw)",maxWidth:"min(116px,22vw)",height:"min(162px,38vh)",borderRadius:"10px",background:st.bg,
         border:`2px solid ${sel?"#f0d48a":can&&play?st.border:"#0e0e18"}`,
         cursor:play?"pointer":"default",
         boxShadow:sel?"0 0 28px #f0d48a,0 12px 36px rgba(0,0,0,.95)":can&&play?`0 6px 22px rgba(0,0,0,.85),0 0 8px ${st.border}45`:"0 3px 10px rgba(0,0,0,.7)",
