@@ -29,7 +29,8 @@
     <title>Dalas Games — Card Battle</title>
 
     <style>
-      /* Previne scroll e seleção de texto durante o jogo */
+      * { box-sizing: border-box; }
+
       body {
         margin: 0;
         padding: 0;
@@ -38,11 +39,40 @@
         -webkit-tap-highlight-color: transparent;
         -webkit-touch-callout: none;
         user-select: none;
+        background: #060809;
+      }
+
+      #rotate-msg { display: none; }
+
+      @media screen and (orientation: portrait) and (max-width: 900px) {
+        #rotate-msg {
+          display: flex;
+          position: fixed;
+          inset: 0;
+          background: #060809;
+          color: #c9a84c;
+          font-family: serif;
+          font-size: 22px;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 16px;
+          z-index: 99999;
+        }
+        #root { display: none; }
       }
     </style>
   </head>
   <body>
     <noscript>Você precisa habilitar JavaScript para jogar.</noscript>
+
+    <!-- Mensagem para girar o celular -->
+    <div id="rotate-msg">
+      <div style="font-size:48px">📱➡️</div>
+      <div>Gire o celular para jogar</div>
+      <div style="font-size:14px;color:#8a6a2a">O jogo funciona em modo paisagem</div>
+    </div>
+
     <div id="root"></div>
 
     <!-- PWA: registra service worker -->
