@@ -890,10 +890,7 @@ const runBotTurn = (room, botIdx, difficulty) => {
     room.blockers = {};
     if (room.turn === 0) room.turnNumber++;
     room.players[room.turn] = untapAll(room.players[room.turn]);
-    if (room.turnNumber > 1) {
-      room.players[room.turn] = drawCards(room.players[room.turn], 1);
-      addLog(room, `📖 ${room.players[room.turn].name} compra uma carta`, "draw");
-    }
+    // Não compra aqui — humano clica em "Comprar" na fase draw
     room.step = "upkeep";
     addLog(room, `🔄 Turno ${room.turnNumber} — ${room.players[room.turn].name}`, "system");
     broadcastRoom(room);
