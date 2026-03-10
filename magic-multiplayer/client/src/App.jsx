@@ -531,7 +531,7 @@ export default function App() {
       </div>
 
       {/* ── HAND ── */}
-      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"4px 8px 4px",flexShrink:0,overflow:"hidden"}} onMouseLeave={()=>setHoveredDelayed(null)}>
+      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"4px 8px 6px",flexShrink:0}} onMouseLeave={()=>setHoveredDelayed(null)}>
         <div style={{display:"flex",gap:"4px",overflowX:"auto",alignItems:"center",paddingBottom:"2px"}}>
           {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed} mobile={isMobile}/>)}
           {me.hand.length===0&&<div style={{color:"#151008",fontSize:"11px",padding:"16px",fontStyle:"italic"}}>Sem cartas na mão</div>}
@@ -655,8 +655,8 @@ function HCard({card,sel,can,myTurn,step,onClick,onHov,mobile=false}) {
   const st=getCardStyle(card);
   const cmc=calcCMC(card.cost);
   const play=myTurn&&(card.type==="land"?["main1","main2"].includes(step):["main1","main2","combat"].includes(step));
-  const w = mobile ? "clamp(70px,16vw,100px)" : "min(116px,22vw)";
-  const h = mobile ? "clamp(98px,22vw,140px)" : "min(162px,38vh)";
+  const w = mobile ? "clamp(60px,13vw,85px)" : "min(116px,22vw)";
+  const h = mobile ? "clamp(84px,18vw,119px)" : "min(162px,38vh)";
   return (
     <div className={mobile ? "" : "hcard"} onClick={onClick}
       onMouseEnter={()=>!mobile&&onHov&&onHov(card)} onMouseLeave={()=>!mobile&&onHov&&onHov(null)}
