@@ -487,26 +487,34 @@ export default function App() {
       </div>
 
       {/* ── MOBILE ACTION BAR ── */}
-      {isMobile && <div style={{background:"#060c18",borderTop:"2px solid #0c1b2e",padding:"4px 8px",flexShrink:0}}>
-        <div style={{display:"flex",gap:"5px",alignItems:"center",justifyContent:"space-between"}}>
+      {isMobile && <div style={{background:"linear-gradient(0deg,#080f20,#0c1630)",borderTop:"2px solid #1a2a4a",borderBottom:"2px solid #1a2a4a",padding:"6px 12px",flexShrink:0}}>
+        <div style={{display:"flex",gap:"6px",alignItems:"center",justifyContent:"center"}}>
           <Mana pool={me.manaPool} compact/>
-          <div style={{fontSize:"10px",color:gs.turn===myIndex?"#f0d48a":"#3a5a7a",fontWeight:"700",flexShrink:0}}>
-            {STEP_LABELS[step]}
+          <div style={{width:"1px",height:"24px",background:"#1a2a3a",flexShrink:0}}/>
+          <div style={{fontSize:"11px",color:gs.turn===myIndex?"#f0d48a":"#3a5a7a",fontWeight:"700",flexShrink:0}}>
+            {gs.turn===myIndex?"":"⏳ "}{STEP_LABELS[step]}
           </div>
-          <div style={{display:"flex",gap:"4px",alignItems:"center",flexShrink:0}}>
-            {error&&<div style={{fontSize:"9px",color:"#ff8888",padding:"2px 5px",background:"rgba(80,0,0,.5)",borderRadius:"4px"}}>{error}</div>}
-            {selCard&&targetMode&&<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{background:"rgba(80,0,0,.5)",border:"1px solid #ff4444",color:"#ff8888",padding:"6px 8px",borderRadius:"6px",cursor:"pointer",fontSize:"11px"}}>✕</button>}
+          <div style={{width:"1px",height:"24px",background:"#1a2a3a",flexShrink:0}}/>
+          <div style={{display:"flex",gap:"5px",alignItems:"center"}}>
+            {error&&<div style={{fontSize:"9px",color:"#ff8888",padding:"2px 5px",background:"rgba(80,0,0,.5)",borderRadius:"4px",maxWidth:"90px"}}>{error}</div>}
+            {selCard&&targetMode&&<button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{background:"rgba(80,0,0,.5)",border:"1px solid #ff4444",color:"#ff8888",padding:"7px 10px",borderRadius:"6px",cursor:"pointer",fontSize:"12px"}}>✕</button>}
             {isMy&&!cp&&<>
-              {step==="untap"&&<button style={{...btn("#74b9ff","#030c18",true),padding:"8px 12px"}} onClick={()=>emit("advance_step")}>🔄</button>}
-              {step==="upkeep"&&<button style={{...btn("#a29bfe","#080318",true),padding:"8px 12px"}} onClick={()=>emit("advance_step")}>⬆️</button>}
-              {step==="draw"&&<button style={{...btn("#55efc4","#031208",true),padding:"8px 14px",fontSize:"12px"}} onClick={()=>emit("draw_card")}>📖 Comprar</button>}
-              {step==="main1"&&<><button style={{...btn("#fdcb6e","#120a01",true),padding:"8px 12px"}} onClick={()=>emit("advance_step")}>⚔️</button><button style={{...btn("#636e72","#080808",true),padding:"8px 12px"}} onClick={()=>emit("skip_to_end")}>⏭️</button></>}
-              {step==="main2"&&<><button style={{...btn("#fdcb6e","#120a01",true),padding:"8px 12px"}} onClick={()=>emit("advance_step")}>🌙</button><button style={{...btn("#636e72","#080808",true),padding:"8px 12px"}} onClick={()=>emit("skip_to_end")}>⏭️</button></>}
-              {step==="end"&&<button style={{...btn("#636e72","#0a0b0c",true),padding:"8px 12px"}} onClick={()=>emit("advance_step")}>→</button>}
+              {step==="untap"&&<button style={{...btn("#74b9ff","#030c18",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>🔄</button>}
+              {step==="upkeep"&&<button style={{...btn("#a29bfe","#080318",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>⬆️</button>}
+              {step==="draw"&&<button style={{...btn("#55efc4","#031208",true),padding:"8px 18px",fontSize:"13px",fontWeight:"bold"}} onClick={()=>emit("draw_card")}>📖 Comprar</button>}
+              {step==="main1"&&<>
+                <button style={{...btn("#fdcb6e","#120a01",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>⚔️</button>
+                <button style={{...btn("#636e72","#080808",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("skip_to_end")}>⏭️</button>
+              </>}
+              {step==="main2"&&<>
+                <button style={{...btn("#fdcb6e","#120a01",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>🌙</button>
+                <button style={{...btn("#636e72","#080808",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("skip_to_end")}>⏭️</button>
+              </>}
+              {step==="end"&&<button style={{...btn("#636e72","#0a0b0c",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>→</button>}
             </>}
-            {isMy&&cp==="declare_attackers"&&<button style={{...btn("#e17055","#150601",true),padding:"8px 12px",animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️{atks.length>0?" "+atks.length:""}</button>}
-            {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),padding:"8px 12px",animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️</button>}
-            {!isMy&&!cp&&<div style={{fontSize:"11px",color:"#2a4a6a"}}>⏳</div>}
+            {isMy&&cp==="declare_attackers"&&<button style={{...btn("#e17055","#150601",true),padding:"8px 14px",fontSize:"14px",animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️{atks.length>0?" "+atks.length:""}</button>}
+            {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),padding:"8px 14px",fontSize:"14px",animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️</button>}
+            {!isMy&&!cp&&<div style={{fontSize:"12px",color:"#2a4a6a"}}>⏳</div>}
           </div>
         </div>
       </div>}
@@ -523,9 +531,9 @@ export default function App() {
       </div>
 
       {/* ── HAND ── */}
-      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"4px 8px 6px",flexShrink:0,overflow:"hidden"}} onMouseLeave={()=>setHoveredDelayed(null)}>
-        <div style={{display:"flex",gap:"4px",overflowX:"auto",alignItems:"flex-end",paddingBottom:"3px"}}>
-          {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed}/>)}
+      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"4px 8px 4px",flexShrink:0,overflow:"hidden"}} onMouseLeave={()=>setHoveredDelayed(null)}>
+        <div style={{display:"flex",gap:"4px",overflowX:"auto",alignItems:"center",paddingBottom:"2px"}}>
+          {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed} mobile={isMobile}/>)}
           {me.hand.length===0&&<div style={{color:"#151008",fontSize:"11px",padding:"16px",fontStyle:"italic"}}>Sem cartas na mão</div>}
         </div>
       </div>
@@ -643,14 +651,16 @@ function BCard({card,atk,blk,tgt,onClick,onHov,small=false}) {
 }
 
 // ── Hand Card ──
-function HCard({card,sel,can,myTurn,step,onClick,onHov}) {
+function HCard({card,sel,can,myTurn,step,onClick,onHov,mobile=false}) {
   const st=getCardStyle(card);
   const cmc=calcCMC(card.cost);
   const play=myTurn&&(card.type==="land"?["main1","main2"].includes(step):["main1","main2","combat"].includes(step));
+  const w = mobile ? "clamp(70px,16vw,100px)" : "min(116px,22vw)";
+  const h = mobile ? "clamp(98px,22vw,140px)" : "min(162px,38vh)";
   return (
-    <div className="hcard" onClick={onClick}
-      onMouseEnter={()=>onHov&&onHov(card)} onMouseLeave={()=>onHov&&onHov(null)}
-      style={{minWidth:"min(116px,22vw)",maxWidth:"min(116px,22vw)",height:"min(162px,38vh)",borderRadius:"10px",background:st.bg,
+    <div className={mobile ? "" : "hcard"} onClick={onClick}
+      onMouseEnter={()=>!mobile&&onHov&&onHov(card)} onMouseLeave={()=>!mobile&&onHov&&onHov(null)}
+      style={{minWidth:w,maxWidth:w,height:h,borderRadius:"10px",background:st.bg,
         border:`2px solid ${sel?"#f0d48a":can&&play?st.border:"#0e0e18"}`,
         cursor:play?"pointer":"default",
         boxShadow:sel?"0 0 28px #f0d48a,0 12px 36px rgba(0,0,0,.95)":can&&play?`0 6px 22px rgba(0,0,0,.85),0 0 8px ${st.border}45`:"0 3px 10px rgba(0,0,0,.7)",
