@@ -1,1280 +1,870 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const cors = require("cors");
+import { useState, useEffect, useCallback, useRef } from "react";
+import { io } from "socket.io-client";
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+const SERVER_URL = process.env.REACT_APP_SERVER_URL || "http://localhost:3001";
 
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
-});
+const imageCache = {};
+const pendingFetches = {};
 
-// ─── CARD DATABASE ────────────────────────────────────────────
-const CARD_DB = [
-  // WHITE
-  { id:"w1", name:"Serra Angel",          type:"creature", subtype:"Angel",    cost:{W:1,generic:4}, colors:["W"], power:4, toughness:4, abilities:["flying","vigilance"],    rarity:"rare" },
-  { id:"w2", name:"Savannah Lions",       type:"creature", subtype:"Cat",      cost:{W:1,generic:0}, colors:["W"], power:2, toughness:1, abilities:[],                        rarity:"common" },
-  { id:"w3", name:"Wrath of God",         type:"sorcery",                      cost:{W:2,generic:2}, colors:["W"], effect:"destroy_all_creatures",                            rarity:"rare" },
-  { id:"w4", name:"Swords to Plowshares", type:"instant",                      cost:{W:1,generic:0}, colors:["W"], effect:"exile_creature",   targeting:"opp_creature",       rarity:"uncommon" },
-  { id:"w5", name:"White Knight",         type:"creature", subtype:"Knight",   cost:{W:2,generic:0}, colors:["W"], power:2, toughness:2, abilities:["first_strike","protection_black"], rarity:"uncommon" },
-  // BLUE
-  { id:"u1", name:"Counterspell",         type:"instant",                      cost:{U:2,generic:0}, colors:["U"], effect:"counter_spell",                                    rarity:"common" },
-  { id:"u2", name:"Air Elemental",        type:"creature", subtype:"Elemental",cost:{U:2,generic:3}, colors:["U"], power:4, toughness:4, abilities:["flying"],               rarity:"uncommon" },
-  { id:"u3", name:"Brainstorm",           type:"instant",                      cost:{U:1,generic:0}, colors:["U"], effect:"draw_3",                                           rarity:"common" },
-  // BLACK
-  { id:"b1", name:"Dark Ritual",          type:"instant",                      cost:{B:1,generic:0}, colors:["B"], effect:"add_3_black_mana",                                rarity:"common" },
-  { id:"b2", name:"Hypnotic Specter",     type:"creature", subtype:"Specter",  cost:{B:2,generic:1}, colors:["B"], power:2, toughness:2, abilities:["flying","discard_on_damage"], rarity:"uncommon" },
-  { id:"b3", name:"Terror",               type:"instant",                      cost:{B:1,generic:1}, colors:["B"], effect:"destroy_creature", targeting:"opp_creature_nonblack", rarity:"common" },
-  { id:"b4", name:"Lord of the Pit",      type:"creature", subtype:"Demon",    cost:{B:3,generic:4}, colors:["B"], power:7, toughness:7, abilities:["flying","trample","upkeep_sacrifice"], rarity:"rare" },
-  // RED
-  { id:"r1", name:"Lightning Bolt",       type:"instant",                      cost:{R:1,generic:0}, colors:["R"], effect:"deal_3_damage",  targeting:"any",                  rarity:"common" },
-  { id:"r2", name:"Shivan Dragon",        type:"creature", subtype:"Dragon",   cost:{R:2,generic:4}, colors:["R"], power:5, toughness:5, abilities:["flying","pump_R"],       rarity:"rare" },
-  { id:"r3", name:"Fireball",             type:"sorcery",                      cost:{R:1,generic:0}, colors:["R"], effect:"deal_x_damage",  targeting:"any",                  rarity:"uncommon" },
-  { id:"r4", name:"Goblin Raider",        type:"creature", subtype:"Goblin",   cost:{R:1,generic:1}, colors:["R"], power:2, toughness:2, abilities:["haste","cant_block"],    rarity:"common" },
-  // GREEN
-  { id:"g1", name:"Giant Growth",         type:"instant",                      cost:{G:1,generic:0}, colors:["G"], effect:"pump_creature",  targeting:"my_creature", pump:{power:3,toughness:3}, rarity:"common" },
-  { id:"g2", name:"Craw Wurm",            type:"creature", subtype:"Wurm",     cost:{G:2,generic:4}, colors:["G"], power:6, toughness:4, abilities:[],                        rarity:"common" },
-  { id:"g3", name:"Llanowar Elves",       type:"creature", subtype:"Elf Druid",cost:{G:1,generic:0}, colors:["G"], power:1, toughness:1, abilities:["tap_mana"],              rarity:"common" },
-  { id:"g4", name:"Force of Nature",      type:"creature", subtype:"Elemental",cost:{G:4,generic:2}, colors:["G"], power:8, toughness:8, abilities:["trample","upkeep_pay_4G"], rarity:"rare" },
-  // LANDS
-  { id:"l1", name:"Plains",   type:"land", produces:["W"], colors:[] },
-  { id:"l2", name:"Island",   type:"land", produces:["U"], colors:[] },
-  { id:"l3", name:"Swamp",    type:"land", produces:["B"], colors:[] },
-  { id:"l4", name:"Mountain", type:"land", produces:["R"], colors:[] },
-  { id:"l5", name:"Forest",   type:"land", produces:["G"], colors:[] },
-];
+const fetchCardImage = async (name) => {
+  if (imageCache[name]) return imageCache[name];
+  // Evita requisições duplicadas simultâneas
+  if (pendingFetches[name]) return pendingFetches[name];
 
-// ─── HELPERS ─────────────────────────────────────────────────
-let uidCounter = 0;
-const mkuid = () => `u${++uidCounter}_${Math.random().toString(36).slice(2,5)}`;
+  const doFetch = async () => {
+    try {
+      // Busca exata
+      let res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const url = data?.image_uris?.normal
+          || data?.image_uris?.large
+          || data?.card_faces?.[0]?.image_uris?.normal
+          || null;
+        if (url) { imageCache[name] = url; return url; }
+      }
+      // Busca fuzzy como fallback
+      res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`);
+      if (res.ok) {
+        const data = await res.json();
+        const url = data?.image_uris?.normal
+          || data?.image_uris?.large
+          || data?.card_faces?.[0]?.image_uris?.normal
+          || null;
+        if (url) { imageCache[name] = url; return url; }
+      }
+      // Busca por texto como último recurso
+      res = await fetch(`https://api.scryfall.com/cards/search?q=!"${encodeURIComponent(name)}"&unique=cards`);
+      if (res.ok) {
+        const data = await res.json();
+        const card = data?.data?.[0];
+        const url = card?.image_uris?.normal || card?.card_faces?.[0]?.image_uris?.normal || null;
+        if (url) { imageCache[name] = url; return url; }
+      }
+      return null;
+    } catch { return null; }
+  };
 
-const shuffle = arr => [...arr].sort(() => Math.random() - 0.5);
+  pendingFetches[name] = doFetch().finally(() => { delete pendingFetches[name]; });
+  return pendingFetches[name];
+};
 
-const buildDeck = (colors) => {
-  const lands = CARD_DB.filter(c => c.type === "land");
-  const spells = CARD_DB.filter(c => c.type !== "land" && c.colors && c.colors.some(x => colors.includes(x)));
-  const deck = [];
-  colors.forEach(col => {
-    const land = lands.find(l => l.produces && l.produces.includes(col));
-    if (land) for (let i = 0; i < Math.floor(24 / colors.length); i++) deck.push({ ...land, uid: mkuid() });
-  });
-  while (deck.length < 60 && spells.length > 0) {
-    deck.push({ ...spells[Math.floor(Math.random() * spells.length)], uid: mkuid() });
-  }
-  return shuffle(deck).slice(0, 60);
+const COLOR_STYLES = {
+  W: { bg:"linear-gradient(135deg,#f8f3e3,#e8d5a3)", border:"#c9a84c", text:"#5a4a1a" },
+  U: { bg:"linear-gradient(135deg,#1a3a6e,#2d5fa8)", border:"#4a90d9", text:"#c8e0ff" },
+  B: { bg:"linear-gradient(135deg,#0d0d0d,#2a1a2e)", border:"#6a3fa0", text:"#d0b8e8" },
+  R: { bg:"linear-gradient(135deg,#5c1a0a,#c0392b)", border:"#e74c3c", text:"#ffd0c8" },
+  G: { bg:"linear-gradient(135deg,#0a2e0a,#1e6b2e)", border:"#27ae60", text:"#b8f0c8" },
+  land: { bg:"linear-gradient(135deg,#2a2010,#4a3820)", border:"#8b6914", text:"#d4b896" },
+  multi: { bg:"linear-gradient(135deg,#3d2a0a,#6b4a1a)", border:"#d4a017", text:"#ffe8a0" },
+};
+
+const getCardStyle = (card) => {
+  if (!card || card.hidden) return { bg:"#1a1a2e", border:"#2a2a4e", text:"#4a4a6a" };
+  if (card.type === "land") return COLOR_STYLES.land;
+  if (!card.colors || card.colors.length === 0) return COLOR_STYLES.land;
+  if (card.colors.length > 1) return COLOR_STYLES.multi;
+  return COLOR_STYLES[card.colors[0]] || COLOR_STYLES.land;
 };
 
 const calcCMC = (cost) => {
   if (!cost) return 0;
-  return Object.entries(cost).reduce((s, [k, v]) => s + (typeof v === "number" ? v : 0), 0);
+  return Object.values(cost).reduce((s, v) => s + (typeof v === "number" ? v : 0), 0);
 };
 
-const canAfford = (card, pool) => {
-  if (card.type === "land") return true;
-  const p = { ...pool };
-  const cost = card.cost || {};
-  for (const [k, v] of Object.entries(cost)) {
-    if (k === "generic" || typeof v !== "number") continue;
-    if ((p[k] || 0) < v) return false;
-    p[k] -= v;
-  }
-  const generic = typeof cost.generic === "number" ? cost.generic : 0;
-  return Object.values(p).reduce((a, b) => a + b, 0) >= generic;
-};
+const STEP_COLORS = { untap:"#74b9ff", upkeep:"#a29bfe", draw:"#55efc4", main1:"#fdcb6e", combat:"#e17055", main2:"#fdcb6e", end:"#636e72" };
+const STEP_LABELS = { untap:"🔄 Desvirar", upkeep:"⬆️ Manutenção", draw:"📖 Comprar", main1:"1️⃣ Principal 1", combat:"⚔️ Combate", main2:"2️⃣ Principal 2", end:"🌙 Fim" };
 
-const payMana = (cost, pool) => {
-  const p = { ...pool };
-  for (const [k, v] of Object.entries(cost)) {
-    if (k === "generic" || typeof v !== "number") continue;
-    p[k] = (p[k] || 0) - v;
-  }
-  let rem = typeof cost.generic === "number" ? cost.generic : 0;
-  for (const k of Object.keys(p)) {
-    if (rem <= 0) break;
-    const take = Math.min(p[k] || 0, rem);
-    p[k] -= take; rem -= take;
-  }
-  return p;
-};
+const logColor = (type) => ({ error:"#ff8888", combat:"#ffd166", system:"#06d6a0", mana:"#74b9ff", destroy:"#fd79a8", draw:"#a29bfe", buff:"#55efc4", spell:"#fdcb6e", play:"#b8f0c8" }[type] || "#8a8a9a");
 
-const drawCards = (player, n = 1) => {
-  let p = { ...player, hand: [...player.hand], deck: [...player.deck] };
-  for (let i = 0; i < n; i++) {
-    if (p.deck.length === 0) { p.life -= 1; continue; }
-    p.hand.push({ ...p.deck[0] });
-    p.deck = p.deck.slice(1);
-  }
-  return p;
-};
-
-// ─── ROOM MANAGEMENT ────────────────────────────────────────
-const rooms = {};
-
-const mkPlayer = (socketId, name, colors) => {
-  const deck = buildDeck(colors);
-  return {
-    socketId, name, colors,
-    life: 20,
-    deck: deck.slice(7),
-    hand: deck.slice(0, 7).map(c => ({ ...c, uid: mkuid() })),
-    battlefield: [],
-    graveyard: [],
-    manaPool: { W:0, U:0, B:0, R:0, G:0 },
-    landsPlayedThisTurn: 0,
-    maxMana: 0,
-  };
-};
-
-const mkRoom = (code) => ({
-  code,
-  players: [],       // [player0, player1]
-  sockets: [],       // [socketId0, socketId1]
-  turn: 0,
-  turnNumber: 1,
-  step: "waiting",   // waiting|untap|upkeep|draw|main1|combat|main2|end
-  combatPhase: null, // null|declare_attackers|declare_blockers|resolve
-  attackers: [],
-  blockers: {},
-  stack: [],
-  log: [],
-  winner: null,
+const btn = (color, bg, big=false) => ({
+  background: bg, border:`1.5px solid ${color}`, color, padding: big?"10px 18px":"7px 14px",
+  borderRadius:"5px", cursor:"pointer", fontFamily:"'Cinzel',serif", fontSize: big?"13px":"12px",
+  letterSpacing:".05em", transition:"all .2s", whiteSpace:"nowrap",
 });
 
-const genCode = () => Math.random().toString(36).slice(2, 7).toUpperCase();
+// ── Card Image ──
+function CardImage({ name, style={} }) {
+  const [url, setUrl] = useState(() => imageCache[name] || null);
+  const [tries, setTries] = useState(0);
 
-// ─── GAME LOGIC ──────────────────────────────────────────────
-const addLog = (room, msg, type = "info") => {
-  room.log.push({ msg, type, id: mkuid() });
-  if (room.log.length > 60) room.log = room.log.slice(-60);
-};
+  useEffect(() => {
+    if (!name) return;
+    // Se já tem no cache, usa direto
+    if (imageCache[name]) { setUrl(imageCache[name]); return; }
 
-const broadcastRoom = (room) => {
-  room.sockets.forEach((sid, idx) => {
-    const socket = io.sockets.sockets.get(sid);
-    if (!socket) return;
-    // send each player their own perspective
-    socket.emit("game_state", {
-      myIndex: idx,
-      turn: room.turn,
-      turnNumber: room.turnNumber,
-      step: room.step,
-      combatPhase: room.combatPhase,
-      attackers: room.attackers,
-      blockers: room.blockers,
-      log: room.log.slice(-30),
-      winner: room.winner,
-      isBot: room.isBot || false,
-      players: room.players.map((p, i) => ({
-        ...p,
-        // hide opponent's hand (show count only)
-        hand: i === idx ? p.hand : p.hand.map(() => ({ hidden: true, uid: mkuid() })),
-      })),
-    });
-  });
-};
+    setUrl(null);
+    let cancelled = false;
 
-const checkWinner = (room) => {
-  if (room.players[0]?.life <= 0) room.winner = 1;
-  if (room.players[1]?.life <= 0) room.winner = 0;
-  // ✅ FIX: limpa a sala da memória após 10 min quando houver vencedor
-  if (room.winner !== null && !room._cleanupScheduled) {
-    room._cleanupScheduled = true;
-    setTimeout(() => { if (rooms[room.code]) delete rooms[room.code]; }, 10 * 60 * 1000);
-  }
-};
-
-const untapAll = (player) => ({
-  ...player,
-  battlefield: player.battlefield.map(c => {
-    const base = { ...c, tapped: false, summoningSick: false };
-    // Reseta pump temporário (Shivan Dragon pump_R)
-    if (c._pumped) {
-      base.power = (c.power || 0) - c._pumped;
-      base._pumped = 0;
-    }
-    return base;
-  }),
-  landsPlayedThisTurn: 0,
-  manaPool: { W:0, U:0, B:0, R:0, G:0 },
-});
-
-const STEPS = ["untap","upkeep","draw","main1","combat","main2","end"];
-
-const advanceStep = (room) => {
-  const cur = STEPS.indexOf(room.step);
-  if (cur >= STEPS.length - 1) {
-    room.step = "untap";
-    room.turn = room.turn === 0 ? 1 : 0;
-    if (room.turn === 0) room.turnNumber++;
-  } else {
-    room.step = STEPS[cur + 1];
-  }
-
-  if (room.step === "untap") {
-    room.players[room.turn] = untapAll(room.players[room.turn]);
-    addLog(room, `🔄 Turno ${room.turnNumber} — ${room.players[room.turn].name}`, "system");
-  }
-  if (room.step === "upkeep") {
-    // Processa habilidades de manutenção das permanentes em campo
-    const activePlayer = room.players[room.turn];
-    // Cria cópia do campo para iterar (pode ser modificado dentro do loop)
-    [...activePlayer.battlefield].forEach(card => {
-
-      // Lord of the Pit: sacrifique uma criatura ou perde 7 de vida
-      if ((card.abilities || []).includes("upkeep_sacrifice")) {
-        const sacrificeTargets = activePlayer.battlefield.filter(c =>
-          c.type === "creature" && c.uid !== card.uid
-        );
-        if (sacrificeTargets.length > 0) {
-          const victim = sacrificeTargets.sort((a,b) =>
-            ((a.power||0)+(a.toughness||0)) - ((b.power||0)+(b.toughness||0))
-          )[0];
-          activePlayer.battlefield = activePlayer.battlefield.filter(c => c.uid !== victim.uid);
-          activePlayer.graveyard.push(victim);
-          addLog(room, `🦇 ${card.name} exige sacrifício! ${victim.name} foi sacrificado.`, "combat");
-        } else {
-          activePlayer.life -= 7;
-          addLog(room, `🦇 ${card.name} — sem criaturas para sacrificar! ${activePlayer.name} perde 7 de vida (${activePlayer.life}❤️)`, "combat");
-          checkWinner(room);
-        }
-      }
-
-      // Force of Nature: pague GGGG na manutenção ou receba 8 de dano
-      if ((card.abilities || []).includes("upkeep_pay_4G")) {
-        const pool = activePlayer.manaPool;
-        if ((pool.G || 0) >= 4) {
-          pool.G -= 4;
-          addLog(room, `🌿 ${card.name}: ${activePlayer.name} pagou GGGG na manutenção.`, "info");
-        } else {
-          activePlayer.life -= 8;
-          addLog(room, `🌿 ${card.name} — ${activePlayer.name} não pagou GGGG e recebeu 8 de dano! (${activePlayer.life}❤️)`, "combat");
-          checkWinner(room);
-        }
+    fetchCardImage(name).then(u => {
+      if (cancelled) return;
+      if (u) {
+        setUrl(u);
+      } else if (tries < 2) {
+        // Tenta mais uma vez após 1.5s
+        setTimeout(() => { if (!cancelled) setTries(t => t + 1); }, 1500);
       }
     });
-  }
+    return () => { cancelled = true; };
+  }, [name, tries]);
 
-  if (room.step === "draw") {
-    // Não compra automaticamente — jogador clica em "Comprar"
-    // (evita dupla compra: advanceStep + draw_card)
-  }
-  if (room.step === "combat") {
-    room.combatPhase = "declare_attackers";
-    room.attackers = [];
-    room.blockers = {};
-  } else {
-    room.combatPhase = null;
-  }
-  if (room.step === "end") {
-    // ✅ FIX: descarte automático para 7 se mão tiver mais
-    const ap = room.players[room.turn];
-    if (ap && ap.hand.length > 7) {
-      const excess = ap.hand.length - 7;
-      const discarded = ap.hand.splice(7, excess);
-      ap.graveyard.push(...discarded);
-      addLog(room, `✋ ${ap.name} descartou ${excess} carta(s) (mão cheia)`, "info");
-    }
-  }
+  if (!url) return (
+    <div style={{width:"100%",height:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"3px",background:"rgba(0,0,0,.2)",...style}}>
+      <div style={{fontSize:"18px",animation:"pulse 1.5s infinite"}}>🃏</div>
+      <div style={{fontSize:"7px",color:"#5a7a9a",textAlign:"center",padding:"0 4px",lineHeight:"1.3",fontFamily:"serif",wordBreak:"break-word"}}>{name}</div>
+    </div>
+  );
+  return <img src={url} alt={name} style={{width:"100%",height:"100%",objectFit:"cover",display:"block",...style}} />;
+}
+
+// ── Traduções para português ──
+const CARD_PT = {
+  "Serra Angel":       { nome:"Serra Angel",         tipo:"Criatura — Anjo" },
+  "Savannah Lions":    { nome:"Leões de Savannah",   tipo:"Criatura — Felino" },
+  "Wrath of God":      { nome:"Ira de Deus",         tipo:"Feitiço" },
+  "Swords to Plowshares": { nome:"Espadas em Arados", tipo:"Instantâneo" },
+  "White Knight":      { nome:"Cavaleiro Branco",    tipo:"Criatura — Cavaleiro" },
+  "Counterspell":      { nome:"Contrafeitiço",       tipo:"Instantâneo" },
+  "Air Elemental":     { nome:"Elemental do Ar",     tipo:"Criatura — Elemental" },
+  "Brainstorm":        { nome:"Tempestade Mental",   tipo:"Instantâneo" },
+  "Dark Ritual":       { nome:"Ritual Negro",        tipo:"Instantâneo" },
+  "Hypnotic Specter":  { nome:"Espectro Hipnótico",  tipo:"Criatura — Espectro" },
+  "Terror":            { nome:"Terror",              tipo:"Instantâneo" },
+  "Lord of the Pit":   { nome:"Senhor do Abismo",    tipo:"Criatura — Demônio" },
+  "Lightning Bolt":    { nome:"Raio",                tipo:"Instantâneo" },
+  "Shivan Dragon":     { nome:"Dragão de Shivan",    tipo:"Criatura — Dragão" },
+  "Fireball":          { nome:"Bola de Fogo",        tipo:"Feitiço" },
+  "Goblin Raider":     { nome:"Saqueador Goblin",    tipo:"Criatura — Goblin" },
+  "Giant Growth":      { nome:"Crescimento Gigante", tipo:"Instantâneo" },
+  "Craw Wurm":         { nome:"Verme Craw",          tipo:"Criatura — Verme" },
+  "Llanowar Elves":    { nome:"Elfos de Llanowar",   tipo:"Criatura — Elfo Druida" },
+  "Force of Nature":   { nome:"Força da Natureza",   tipo:"Criatura — Elemental" },
+  "Plains":            { nome:"Planície",            tipo:"Terra Básica" },
+  "Island":            { nome:"Ilha",                tipo:"Terra Básica" },
+  "Swamp":             { nome:"Pântano",             tipo:"Terra Básica" },
+  "Mountain":          { nome:"Montanha",            tipo:"Terra Básica" },
+  "Forest":            { nome:"Floresta",            tipo:"Terra Básica" },
 };
 
-const resolveEffect = (room, card, casterIdx, targetUid) => {
-  const oppIdx = 1 - casterIdx;
+const ABILITY_PT = {
+  flying:           "🦅 Voar",
+  trample:          "🐾 Atropelar",
+  haste:            "⚡ Ímpeto",
+  vigilance:        "👁️ Vigilância",
+  first_strike:     "🗡️ Ataque Duplo",
+  protection_black: "🛡️ Proteção contra Preto",
+  protection_red:   "🛡️ Proteção contra Vermelho",
+  protection_white: "🛡️ Proteção contra Branco",
+  protection_blue:  "🛡️ Proteção contra Azul",
+  protection_green: "🛡️ Proteção contra Verde",
+  tap_mana:         "🌿 Toque: Produza 1 mana verde",
+  upkeep_sacrifice: "🦇 Manutenção: Sacrifique uma criatura ou perca 7 de vida",
+  upkeep_pay_4G:    "🌿 Manutenção: Pague GGGG ou receba 8 de dano",
+  pump_R:           "🔥 Ative: Gaste R → +1/+0 até fim do turno",
+  cant_block:       "⚔️ Não pode bloquear",
+  discard_on_damage:"👻 Ao causar dano: oponente descarta uma carta aleatória",
+};
 
-  // ── Dano (Lightning Bolt = 3, Fireball = X baseado no mana gasto) ──
-  if (card.effect === "deal_3_damage" || card.effect === "deal_x_damage") {
-    const dmg = card.effect === "deal_x_damage" ? (card._xDmg || 1) : 3;
+const EFFECT_PT = {
+  destroy_all_creatures: "💥 Destrói todas as criaturas.",
+  exile_creature:        "✨ Exila uma criatura alvo.",
+  destroy_creature:      "☠️ Destrói uma criatura alvo.",
+  deal_3_damage:         "⚡ Causa 3 pontos de dano a qualquer alvo (criatura ou jogador).",
+  deal_4_damage:         "🔥 Causa 4 pontos de dano a qualquer alvo (criatura ou jogador).",
+  deal_x_damage:         "🔥 Causa X de dano (gaste todo o mana restante como X).",
+  draw_3:                "🧠 Compre 3 cartas.",
+  add_3_black_mana:      "💀 Adicione BBB à sua reserva de mana.",
+  pump_creature:         "💪 Criatura alvo recebe +3/+3 até o fim do turno.",
+  counter_spell:         "🌊 Contramagica — cancela uma mágica alvo (não implementado no jogo).",
+};
 
-    if (targetUid === "player") {
-      // Dano direto ao jogador oponente
-      room.players[oppIdx].life -= dmg;
-      addLog(room, `⚡ ${card.name} causa ${dmg} de dano direto a ${room.players[oppIdx].name}! (${room.players[oppIdx].life} ❤️)`, "combat");
+const MANA_NOME = { W:"Branco", U:"Azul", B:"Preto", R:"Vermelho", G:"Verde" };
+const RARITY_PT = { common:"◆ Comum", uncommon:"◆◆ Incomum", rare:"◆◆◆ Rara" };
+
+const MANA_ICON = { W:"☀️", U:"💧", B:"💀", R:"🔥", G:"🌿" };
+
+const tipoPT = (card) => {
+  if (card.type==="land") return "Terra";
+  if (card.type==="creature") return `Criatura${card.subtype?" — "+card.subtype:""}`;
+  if (card.type==="instant") return "Instantâneo";
+  if (card.type==="sorcery") return "Feitiço";
+  return card.type;
+};
+
+const custoIcones = (cost) => {
+  const icons = [];
+  for (const [k,v] of Object.entries(cost)) {
+    if (typeof v !== "number" || v === 0) continue;
+    if (k === "generic") { icons.push(<span key="gen" style={{background:"rgba(100,100,100,.4)",borderRadius:"50%",width:"18px",height:"18px",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:"10px",color:"#aaa",fontWeight:"bold"}}>{v}</span>); }
+    else { for (let i=0;i<v;i++) icons.push(<span key={k+i} style={{fontSize:"14px"}}>{MANA_ICON[k]||k}</span>); }
+  }
+  return icons;
+};
+
+// ═══════════════════════════════════════════════════════════════
+export default function App() {
+  const [screen, setScreen] = useState("menu");
+  const [socket, setSocket] = useState(null);
+  const [gs, setGs] = useState(null);
+  const [myIndex, setMyIndex] = useState(null);
+  const [roomCode, setRoomCode] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [playerName, setPlayerName] = useState(() => sessionStorage.getItem("mtg_name") || "");
+  const [selColors, setSelColors] = useState(() => { try { return JSON.parse(sessionStorage.getItem("mtg_colors")) || ["R","G"]; } catch { return ["R","G"]; }});
+  const [error, setError] = useState("");
+  const [waitMsg, setWaitMsg] = useState("");
+  const [selCard, setSelCard] = useState(null);
+  const [targetMode, setTargetMode] = useState(null);
+  const [hovered, setHovered] = useState(null);
+  const logRef = useRef(null);
+  const hoverTimer = useRef(null);
+
+  const setHoveredDelayed = useCallback((card) => {
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    if (card) {
+      // Ao entrar numa carta, mostra imediatamente
+      setHovered(card);
     } else {
-      const tgt = room.players[oppIdx].battlefield.find(c => c.uid === targetUid)
-                || room.players[casterIdx].battlefield.find(c => c.uid === targetUid);
-      const tgtOwner = room.players[oppIdx].battlefield.find(c => c.uid === targetUid) ? oppIdx : casterIdx;
-      if (tgt) {
-        room.players[tgtOwner].battlefield = room.players[tgtOwner].battlefield
-          .map(c => c.uid === targetUid ? { ...c, damage: (c.damage || 0) + dmg } : c)
-          .filter(c => (c.toughness || 0) > (c.damage || 0));
-        addLog(room, `⚡ ${card.name} causa ${dmg} dano a ${tgt.name}!`, "combat");
-      } else {
-        // Sem alvo específico = dano ao jogador
-        room.players[oppIdx].life -= dmg;
-        addLog(room, `⚡ ${card.name} causa ${dmg} de dano direto a ${room.players[oppIdx].name}! (${room.players[oppIdx].life} ❤️)`, "combat");
-      }
+      // Ao sair, espera 80ms antes de limpar (evita piscar entre cartas)
+      hoverTimer.current = setTimeout(() => setHovered(null), 80);
     }
-    checkWinner(room);
-  }
+  }, []);
 
-  // ── Terror / destroy_creature ──
-  if (card.effect === "destroy_creature") {
-    const tgt = room.players[oppIdx].battlefield.find(c => c.uid === targetUid);
-    if (tgt) {
-      // Terror não destrói criaturas pretas (protection_black / black creature)
-      if (card.name === "Terror" && (tgt.colors||[]).includes("B")) {
-        addLog(room, `☠️ Terror falhou — ${tgt.name} é preto!`, "info");
-      } else if (card.name === "Terror" && (tgt.abilities||[]).includes("indestructible")) {
-        addLog(room, `☠️ Terror falhou — ${tgt.name} é indestrutível!`, "info");
-      } else {
-        // Proteção contra preto (White Knight)
-        if ((tgt.abilities||[]).includes("protection_black") && (card.colors||[]).includes("B")) {
-          addLog(room, `🛡️ ${tgt.name} tem proteção contra preto! ${card.name} falhou.`, "info");
-        } else {
-          room.players[oppIdx].battlefield = room.players[oppIdx].battlefield.filter(c => c.uid !== targetUid);
-          room.players[oppIdx].graveyard.push(tgt);
-          addLog(room, `☠️ ${tgt.name} destruído por ${card.name}!`, "destroy");
-        }
-      }
-    }
-  }
+  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight; }, [gs?.log]);
 
-  // ── Swords to Plowshares / exile_creature ──
-  if (card.effect === "exile_creature") {
-    const tgt = room.players[oppIdx].battlefield.find(c => c.uid === targetUid);
-    if (tgt) {
-      room.players[oppIdx].battlefield = room.players[oppIdx].battlefield.filter(c => c.uid !== targetUid);
-      // Swords to Plowshares: oponente ganha vida = poder da criatura
-      if (card.name === "Swords to Plowshares") {
-        room.players[oppIdx].life += (tgt.power || 0);
-        addLog(room, `✨ ${tgt.name} exilado! ${room.players[oppIdx].name} ganha ${tgt.power || 0} de vida.`, "exile");
-      } else {
-        addLog(room, `✨ ${tgt.name} exilado por ${card.name}!`, "exile");
-      }
-    }
-  }
+  const showError = (msg) => { setError(msg); setTimeout(()=>setError(""), 3000); };
 
-  // ── Wrath of God ──
-  if (card.effect === "destroy_all_creatures") {
-    room.players[0].graveyard.push(...room.players[0].battlefield.filter(c => c.type !== "land"));
-    room.players[0].battlefield = room.players[0].battlefield.filter(c => c.type === "land");
-    room.players[1].graveyard.push(...room.players[1].battlefield.filter(c => c.type !== "land"));
-    room.players[1].battlefield = room.players[1].battlefield.filter(c => c.type === "land");
-    addLog(room, `☀️ Ira de Deus! Todas as criaturas foram destruídas!`, "destroy");
-  }
-
-  // ── Brainstorm / draw_3 ──
-  if (card.effect === "draw_3") {
-    room.players[casterIdx] = drawCards(room.players[casterIdx], 3);
-    addLog(room, `🧠 ${room.players[casterIdx].name} compra 3 cartas!`, "draw");
-  }
-
-  // ── Dark Ritual / add_3_black_mana ──
-  if (card.effect === "add_3_black_mana") {
-    room.players[casterIdx].manaPool.B = (room.players[casterIdx].manaPool.B || 0) + 3;
-    addLog(room, `💀 Ritual Negro! +3 mana preto`, "mana");
-  }
-
-  // ── Counterspell ──
-  if (card.effect === "counter_spell") {
-    const lastSpell = room.players[oppIdx].graveyard.slice().reverse().find(c => c.type !== "land");
-    if (lastSpell) {
-      addLog(room, `🌊 ${card.name} contramagicou ${lastSpell.name}!`, "spell");
-    } else {
-      addLog(room, `🌊 ${card.name} — nenhum alvo válido no momento`, "info");
-    }
-  }
-
-  // ── Giant Growth / pump_creature ──
-  if (card.effect === "pump_creature") {
-    const p = card.pump || { power: 3, toughness: 3 };
-    const tgt = room.players[casterIdx].battlefield.find(c => c.uid === targetUid);
-    if (tgt) {
-      room.players[casterIdx].battlefield = room.players[casterIdx].battlefield.map(c =>
-        c.uid === targetUid ? { ...c, power: (c.power || 0) + p.power, toughness: (c.toughness || 0) + p.toughness } : c
-      );
-      addLog(room, `💪 ${tgt.name} recebe +${p.power}/+${p.toughness} até fim do turno!`, "buff");
-    }
-  }
-};
-
-const resolveCombat = (room) => {
-  const atkIdx = room.turn;
-  const defIdx = 1 - room.turn;
-
-  room.attackers.forEach(atkUid => {
-    const attacker = room.players[atkIdx].battlefield.find(c => c.uid === atkUid);
-    if (!attacker) return;
-
-    const blockerUid = room.blockers[atkUid];
-
-    if (blockerUid) {
-      const blocker = room.players[defIdx].battlefield.find(c => c.uid === blockerUid);
-      if (!blocker) {
-        // Bloqueador morreu antes — dano vai ao jogador
-        room.players[defIdx].life -= (attacker.power || 0);
-        addLog(room, `🗡️ ${attacker.name} passa! ${room.players[defIdx].name}: ${room.players[defIdx].life} ❤️`, "combat");
-        return;
-      }
-
-      // Proteção contra cores
-      const atkColors = attacker.colors || [];
-      const blkAbils = blocker.abilities || [];
-      const atkAbils = attacker.abilities || [];
-      const blockerProtected =
-        (blkAbils.includes("protection_black") && atkColors.includes("B")) ||
-        (blkAbils.includes("protection_red") && atkColors.includes("R")) ||
-        (blkAbils.includes("protection_white") && atkColors.includes("W")) ||
-        (blkAbils.includes("protection_blue") && atkColors.includes("U")) ||
-        (blkAbils.includes("protection_green") && atkColors.includes("G"));
-
-      if (blockerProtected) {
-        addLog(room, `🛡️ ${blocker.name} tem proteção! ${attacker.name} não causa dano.`, "combat");
-        // Bloqueador ainda causa dano ao atacante
-        if ((blocker.power || 0) >= (attacker.toughness || 0)) {
-          room.players[atkIdx].battlefield = room.players[atkIdx].battlefield.filter(c => c.uid !== atkUid);
-          room.players[atkIdx].graveyard.push(attacker);
-          addLog(room, `💀 ${attacker.name} morre!`, "destroy");
-        }
-        return;
-      }
-
-      const ad = attacker.power || 0;
-      const bd = blocker.power || 0;
-      const at = attacker.toughness || 0;
-      const bt = blocker.toughness || 0;
-
-      // First strike: atacante com first_strike causa dano antes
-      const atkFirstStrike = atkAbils.includes("first_strike");
-      const blkFirstStrike = blkAbils.includes("first_strike");
-
-      addLog(room, `💥 ${attacker.name}(${ad}/${at}) vs ${blocker.name}(${bd}/${bt})`, "combat");
-
-      let atkDead = false, blkDead = false;
-
-      if (atkFirstStrike && !blkFirstStrike) {
-        // Atacante causa dano primeiro
-        if (ad >= bt) { blkDead = true; }
-        if (!blkDead && bd >= at) { atkDead = true; }
-      } else if (blkFirstStrike && !atkFirstStrike) {
-        // Bloqueador causa dano primeiro
-        if (bd >= at) { atkDead = true; }
-        if (!atkDead && ad >= bt) { blkDead = true; }
-      } else {
-        // Dano simultâneo
-        if (ad >= bt) blkDead = true;
-        if (bd >= at) atkDead = true;
-      }
-
-      // Trample: excesso de dano vai ao jogador
-      if (atkAbils.includes("trample") && blkDead) {
-        const excessDmg = ad - bt;
-        if (excessDmg > 0) {
-          room.players[defIdx].life -= excessDmg;
-          addLog(room, `🐾 Atropelamento! ${excessDmg} de dano extra a ${room.players[defIdx].name}! (${room.players[defIdx].life} ❤️)`, "combat");
-        }
-      }
-
-      if (blkDead) {
-        room.players[defIdx].battlefield = room.players[defIdx].battlefield.filter(c => c.uid !== blockerUid);
-        room.players[defIdx].graveyard.push(blocker);
-        addLog(room, `💀 ${blocker.name} morre!`, "destroy");
-        // Hypnotic Specter: oponente descarta uma carta aleatória ao ser danificado
-        if (atkAbils.includes("discard_on_damage")) {
-          const hand = room.players[defIdx].hand;
-          if (hand.length > 0) {
-            const disIdx = Math.floor(Math.random() * hand.length);
-            const dis = hand.splice(disIdx, 1)[0];
-            room.players[defIdx].graveyard.push(dis);
-            addLog(room, `👻 ${attacker.name} fez ${room.players[defIdx].name} descartar ${dis.name}!`, "spell");
-          }
-        }
-      }
-      if (atkDead) {
-        room.players[atkIdx].battlefield = room.players[atkIdx].battlefield.filter(c => c.uid !== atkUid);
-        room.players[atkIdx].graveyard.push(attacker);
-        addLog(room, `💀 ${attacker.name} morre!`, "destroy");
-      }
-
-    } else {
-      // Sem bloqueador — dano direto ao jogador
-      const dmg = attacker.power || 0;
-      room.players[defIdx].life -= dmg;
-      addLog(room, `🗡️ ${attacker.name} causa ${dmg} dano! (${room.players[defIdx].name}: ${room.players[defIdx].life} ❤️)`, "combat");
-      // Hypnotic Specter: descard quando causa dano direto
-      if ((attacker.abilities||[]).includes("discard_on_damage")) {
-        const hand = room.players[defIdx].hand;
-        if (hand.length > 0) {
-          const disIdx = Math.floor(Math.random() * hand.length);
-          const dis = hand.splice(disIdx, 1)[0];
-          room.players[defIdx].graveyard.push(dis);
-          addLog(room, `👻 ${attacker.name} fez ${room.players[defIdx].name} descartar ${dis.name}!`, "spell");
-        }
-      }
-    }
-  });
-
-  room.attackers = [];
-  room.blockers = {};
-  room.combatPhase = null;
-  checkWinner(room);
-};
-
-// ─── BOT AI SYSTEM ───────────────────────────────────────────
-
-// Avalia o "valor" de uma carta para o bot
-const cardValue = (card) => {
-  if (!card) return 0;
-  if (card.type === "creature") {
-    const base = (card.power || 0) + (card.toughness || 0);
-    const abilityBonus = (card.abilities || []).reduce((s, a) => s + ({flying:2,trample:1,haste:2,vigilance:1,first_strike:1,tap_mana:1}[a]||0), 0);
-    return base + abilityBonus;
-  }
-  if (card.effect === "destroy_all_creatures") return 8;
-  if (card.effect === "exile_creature") return 5;
-  if (card.effect === "destroy_creature") return 4;
-  if (card.effect === "deal_4_damage") return 4;
-  if (card.effect === "deal_3_damage") return 3;
-  if (card.effect === "draw_3") return 4;
-  if (card.effect === "pump_creature") return 2;
-  if (card.effect === "add_3_black_mana") return 2;
-  return 1;
-};
-
-// Avalia o estado do jogo para o bot (positivo = vantagem do bot)
-const evaluateBoard = (room, botIdx) => {
-  const playerIdx = 1 - botIdx;
-  let score = 0;
-  // Diferença de vida
-  score += (room.players[botIdx].life - room.players[playerIdx].life) * 2;
-  // Valor das criaturas em campo
-  room.players[botIdx].battlefield.filter(c=>c.type==="creature").forEach(c => score += cardValue(c));
-  room.players[playerIdx].battlefield.filter(c=>c.type==="creature").forEach(c => score -= cardValue(c));
-  // Cartas na mão
-  score += room.players[botIdx].hand.length * 0.5;
-  score -= room.players[playerIdx].hand.length * 0.5;
-  return score;
-};
-
-// Verifica se o bot pode pagar o custo
-const botCanAfford = (card, pool) => canAfford(card, pool);
-
-// Bot toca todas as terras disponíveis para gerar mana
-const botTapAllLands = (room, botIdx) => {
-  const bot = room.players[botIdx];
-  bot.battlefield.filter(c => c.type === "land" && !c.tapped).forEach(land => {
-    bot.battlefield = bot.battlefield.map(c => c.uid === land.uid ? { ...c, tapped: true } : c);
-    if (land.produces) land.produces.forEach(m => { bot.manaPool[m] = (bot.manaPool[m] || 0) + 1; });
-  });
-  // Tap criaturas com tap_mana (Llanowar Elves)
-  bot.battlefield.filter(c => c.type === "creature" && !c.tapped && !c.summoningSick && (c.abilities||[]).includes("tap_mana")).forEach(creature => {
-    bot.battlefield = bot.battlefield.map(c => c.uid === creature.uid ? { ...c, tapped: true } : c);
-    bot.manaPool.G = (bot.manaPool.G || 0) + 1;
-    addLog(room, `🧝 ${bot.name} toca ${creature.name} → +1 mana verde`, "mana");
-  });
-};
-
-// Bot joga uma terra da mão se tiver
-const botPlayLand = (room, botIdx) => {
-  const bot = room.players[botIdx];
-  if (bot.landsPlayedThisTurn >= 1) return;
-  const land = bot.hand.find(c => c.type === "land");
-  if (!land) return;
-  bot.hand = bot.hand.filter(c => c.uid !== land.uid);
-  const newLand = { ...land, uid: mkuid(), tapped: false };
-  bot.battlefield.push(newLand);
-  bot.landsPlayedThisTurn++;
-  bot.maxMana++;
-  addLog(room, `🏔️ ${bot.name} joga ${land.name}`, "play");
-};
-
-// Bot escolhe a melhor carta para jogar baseado na dificuldade
-const botChooseSpell = (room, botIdx, difficulty) => {
-  const bot = room.players[botIdx];
-  const oppIdx = 1 - botIdx;
-  const playable = bot.hand.filter(c => c.type !== "land" && botCanAfford(c, bot.manaPool));
-  if (playable.length === 0) return null;
-
-  if (difficulty === "random") return playable[Math.floor(Math.random() * playable.length)];
-
-  if (difficulty === "basic") {
-    // Prefere criaturas, depois dano direto
-    return playable.sort((a,b) => cardValue(b) - cardValue(a))[0];
-  }
-
-  if (difficulty === "medium" || difficulty === "hard") {
-    const oppCreatures = room.players[oppIdx].battlefield.filter(c => c.type === "creature");
-    const myCreatures = bot.battlefield.filter(c => c.type === "creature");
-
-    // Prioridade hard: remover ameaças > criar criaturas > dano direto
-    if (difficulty === "hard") {
-      // Se oponente tem criaturas voadoras poderosas, usa remoção
-      const threats = oppCreatures.filter(c => cardValue(c) >= 6);
-      if (threats.length > 0) {
-        const removal = playable.find(c => ["destroy_creature","exile_creature","destroy_all_creatures"].includes(c.effect));
-        if (removal) return removal;
-      }
-      // Se pode matar o oponente com dano direto, faz isso
-      const dmgSpells = playable.filter(c => ["deal_3_damage","deal_4_damage"].includes(c.effect));
-      const totalDmg = dmgSpells.reduce((s,c) => s + (c.effect==="deal_3_damage"?3:4), 0);
-      if (totalDmg >= room.players[oppIdx].life) return dmgSpells[0];
-      // Se vida baixa, cura com pump ou usa remoção
-      if (room.players[botIdx].life <= 8) {
-        const removal = playable.find(c => ["destroy_all_creatures","destroy_creature","exile_creature"].includes(c.effect));
-        if (removal) return removal;
-      }
-    }
-    // Geral medium/hard: maior valor
-    return playable.sort((a,b) => cardValue(b) - cardValue(a))[0];
-  }
-  return playable[0];
-};
-
-// Bot escolhe atacantes
-const botChooseAttackers = (room, botIdx, difficulty) => {
-  const bot = room.players[botIdx];
-  const oppIdx = 1 - botIdx;
-  const eligible = bot.battlefield.filter(c => c.type === "creature" && !c.tapped && !c.summoningSick);
-  if (eligible.length === 0) return [];
-
-  if (difficulty === "random") {
-    return eligible.filter(() => Math.random() > 0.4).map(c => c.uid);
-  }
-
-  if (difficulty === "basic") {
-    // Ataca com tudo se tiver vantagem ou vida do oponente for baixa
-    const myPower = eligible.reduce((s,c) => s + (c.power||0), 0);
-    if (myPower > 0) return eligible.map(c => c.uid);
-    return [];
-  }
-
-  if (difficulty === "medium" || difficulty === "hard") {
-    const oppCreatures = room.players[oppIdx].battlefield.filter(c => c.type === "creature" && !c.tapped);
-    const oppLife = room.players[oppIdx].life;
-
-    // Hard: calcula se ataque causa dano letal
-    if (difficulty === "hard") {
-      const totalPower = eligible.reduce((s,c) => s + (c.power||0), 0);
-      if (totalPower >= oppLife) return eligible.map(c => c.uid); // ataque letal!
-    }
-
-    // Ataca com criaturas que têm vantagem sobre bloqueadores
-    if (oppCreatures.length === 0) return eligible.map(c => c.uid); // sem bloqueadores, ataca tudo
-
-    // Ataca com criaturas que sobrevivem ao bloqueio ou têm flying
-    return eligible.filter(atk => {
-      if ((atk.abilities||[]).includes("flying")) {
-        // Voa — só bloqueia se oponente tiver voador
-        const canBeBlocked = oppCreatures.some(b => (b.abilities||[]).includes("flying"));
-        return !canBeBlocked || atk.power > 0;
-      }
-      // Terrestre — ataca se tiver poder suficiente
-      const worstBlocker = oppCreatures.sort((a,b) => (b.power||0)-(a.power||0))[0];
-      if (!worstBlocker) return true;
-      // Ataca se mata o bloqueador sem morrer (ou tem trample)
-      const survives = (atk.toughness||0) > (worstBlocker.power||0);
-      const killsBlocker = (atk.power||0) >= (worstBlocker.toughness||0);
-      const hasTramp = (atk.abilities||[]).includes("trample");
-      return survives || killsBlocker || hasTramp;
-    }).map(c => c.uid);
-  }
-  return [];
-};
-
-// Bot escolhe bloqueadores
-const botChooseBlockers = (room, botIdx, difficulty) => {
-  const bot = room.players[botIdx];
-  const attackers = room.attackers.map(uid => {
-    const atkIdx = 1 - botIdx;
-    return room.players[atkIdx].battlefield.find(c => c.uid === uid);
-  }).filter(Boolean);
-
-  const myCreatures = bot.battlefield.filter(c => c.type === "creature" && !c.tapped);
-  const blockers = {};
-
-  if (difficulty === "random") {
-    attackers.forEach(atk => {
-      const blocker = myCreatures[Math.floor(Math.random() * myCreatures.length)];
-      if (blocker && Math.random() > 0.5) blockers[atk.uid] = blocker.uid;
+  const connect = useCallback(() => {
+    const s = io(SERVER_URL, { transports:["websocket","polling"] });
+    s.on("room_created", ({code}) => { setRoomCode(code); setWaitMsg(`Código: ${code}`); setScreen("lobby"); });
+    s.on("waiting", ({msg}) => setWaitMsg(msg));
+    s.on("game_state", (state) => {
+      setMyIndex(state.myIndex);
+      setGs(state);
+      setScreen("game");
+      // Pré-carrega imagens de todas as cartas visíveis
+      const allCards = state.players.flatMap(p => [
+        ...( p.hand || []),
+        ...(p.battlefield || []),
+      ]);
+      const names = [...new Set(allCards.map(c => c.name).filter(Boolean))];
+      names.forEach(name => { if (!imageCache[name]) fetchCardImage(name); });
     });
-    return blockers;
-  }
-
-  if (difficulty === "basic") {
-    // Bloqueia o atacante mais forte com o bloqueador mais forte
-    const sortedAtk = [...attackers].sort((a,b) => (b.power||0)-(a.power||0));
-    const sortedBlk = [...myCreatures].sort((a,b) => (b.power||0)-(a.power||0));
-    sortedAtk.forEach((atk, i) => { if (sortedBlk[i]) blockers[atk.uid] = sortedBlk[i].uid; });
-    return blockers;
-  }
-
-  if (difficulty === "medium" || difficulty === "hard") {
-    const usedBlockers = new Set();
-    // Ordena atacantes por ameaça (maior dano primeiro)
-    const sortedAtk = [...attackers].sort((a,b) => (b.power||0)-(a.power||0));
-
-    sortedAtk.forEach(atk => {
-      // Encontra o melhor bloqueador para este atacante
-      const best = myCreatures
-        .filter(b => !usedBlockers.has(b.uid))
-        .filter(b => {
-          if ((atk.abilities||[]).includes("flying")) return (b.abilities||[]).includes("flying");
-          return true;
-        })
-        .sort((a,b) => {
-          // Prefere bloqueador que: mata o atacante E sobrevive
-          const aKills = (a.power||0) >= (atk.toughness||0);
-          const bKills = (b.power||0) >= (atk.toughness||0);
-          const aSurv = (a.toughness||0) > (atk.power||0);
-          const bSurv = (b.toughness||0) > (atk.power||0);
-          const aScore = (aKills?2:0) + (aSurv?1:0);
-          const bScore = (bKills?2:0) + (bSurv?1:0);
-          return bScore - aScore;
-        })[0];
-
-      if (best) {
-        // Hard: só bloqueia se vale a pena
-        if (difficulty === "hard") {
-          const kills = (best.power||0) >= (atk.toughness||0);
-          const survives = (best.toughness||0) > (atk.power||0);
-          const atkDmgSignificant = (atk.power||0) >= 3;
-          if (kills || survives || atkDmgSignificant) {
-            blockers[atk.uid] = best.uid;
-            usedBlockers.add(best.uid);
-          }
-        } else {
-          blockers[atk.uid] = best.uid;
-          usedBlockers.add(best.uid);
-        }
-      }
+    s.on("error", ({msg}) => { if (msg !== "Sala cheia!") showError(msg); });
+    s.on("rejoin_failed", () => {
+      // Sala não existe mais, limpa sessão e volta pro menu
+      sessionStorage.removeItem("mtg_room");
+      sessionStorage.removeItem("mtg_name");
+      sessionStorage.removeItem("mtg_colors");
+      setScreen("menu");
+      showError("Sessão expirada. Por favor, crie ou entre em uma nova sala.");
     });
-    return blockers;
-  }
-  return {};
-};
+    setSocket(s);
+    return s;
+  }, []);
 
-// Executa o turno completo do bot com delay para parecer humano
-const runBotTurn = (room, botIdx, difficulty) => {
-  if (room.winner !== null) return;
-  const delay = { random:300, basic:600, medium:900, hard:1200 }[difficulty] || 800;
-
-  const step = (fn, ms) => new Promise(r => setTimeout(() => { fn(); r(); }, ms));
-
-  const doTurn = async () => {
-    if (!rooms[room.code] || room.winner !== null) return;
-
-    // UNTAP
-    room.players[botIdx] = untapAll(room.players[botIdx]);
-    addLog(room, `🔄 Turno ${room.turnNumber} — ${room.players[botIdx].name} (🤖)`, "system");
-    broadcastRoom(room);
-    await step(()=>{}, delay);
-
-    // UPKEEP
-    addLog(room, `⬆️ Manutenção do bot`, "info");
-    broadcastRoom(room);
-    await step(()=>{}, delay/2);
-
-    // DRAW
-    if (room.turnNumber > 1) {
-      room.players[botIdx] = drawCards(room.players[botIdx], 1);
-      addLog(room, `📖 ${room.players[botIdx].name} compra uma carta`, "draw");
-      broadcastRoom(room);
+  // ── Reconexão automática ao recarregar ──
+  useEffect(() => {
+    const savedRoom = sessionStorage.getItem("mtg_room");
+    const savedName = sessionStorage.getItem("mtg_name");
+    const savedColors = (() => { try { return JSON.parse(sessionStorage.getItem("mtg_colors")); } catch { return null; }})();
+    if (savedRoom && savedName) {
+      setWaitMsg("Reconectando...");
+      setScreen("lobby");
+      const s = connect();
+      s.emit("rejoin_room", { code: savedRoom, name: savedName, colors: savedColors || ["R","G"] });
     }
-    await step(()=>{}, delay);
+  }, []);
 
-    // MAIN1 — toca terras, convoca criaturas, lança feitiços
-    botTapAllLands(room, botIdx);
-    botPlayLand(room, botIdx);
-    botTapAllLands(room, botIdx); // retoca após jogar terra
-    broadcastRoom(room);
-    await step(()=>{}, delay);
-
-    // Lança feitiços/criaturas
-    let spellsCast = 0;
-    const maxSpells = difficulty === "hard" ? 5 : difficulty === "medium" ? 3 : 2;
-    while (spellsCast < maxSpells) {
-      const card = botChooseSpell(room, botIdx, difficulty);
-      if (!card) break;
-      const bot = room.players[botIdx];
-      bot.manaPool = payMana(card.cost || {}, bot.manaPool);
-      bot.hand = bot.hand.filter(c => c.uid !== card.uid);
-      if (card.type === "creature") {
-        bot.battlefield.push({ ...card, uid: mkuid(), tapped: false, summoningSick: true, damage: 0 });
-        addLog(room, `🐉 ${bot.name} convoca ${card.name} (${card.power}/${card.toughness})`, "play");
-      } else {
-        // Escolhe alvo para feitiços
-        const oppIdx = 1 - botIdx;
-        let targetUid = null;
-        if (["destroy_creature","exile_creature","deal_3_damage","deal_4_damage"].includes(card.effect)) {
-          const targets = room.players[oppIdx].battlefield.filter(c => c.type === "creature");
-          if (targets.length > 0) {
-            targetUid = targets.sort((a,b) => cardValue(b)-cardValue(a))[0].uid;
-          }
-        }
-        if (["pump_creature"].includes(card.effect)) {
-          const myCreatures = bot.battlefield.filter(c => c.type === "creature");
-          if (myCreatures.length > 0) targetUid = myCreatures.sort((a,b) => cardValue(b)-cardValue(a))[0].uid;
-        }
-        bot.graveyard.push(card);
-        addLog(room, `🪄 ${bot.name} lança ${card.name}`, "spell");
-        resolveEffect(room, card, botIdx, targetUid);
-      }
-      checkWinner(room);
-      broadcastRoom(room);
-      if (room.winner !== null) return;
-      spellsCast++;
-      await step(()=>{}, delay);
-      botTapAllLands(room, botIdx); // toca mais terras se precisar
+  // ── Salva sessão sempre que entrar num jogo ──
+  useEffect(() => {
+    if (screen === "game" && myIndex !== null && gs) {
+      const code = gs.players ? sessionStorage.getItem("mtg_room") : null;
+      if (code) return; // já salvo
     }
+  }, [screen, myIndex]);
 
-    // COMBAT
-    addLog(room, `⚔️ Fase de combate do bot`, "info");
-    room.combatPhase = "declare_attackers";
-    room.attackers = [];
-    broadcastRoom(room);
-    await step(()=>{}, delay);
-
-    const attackerUids = botChooseAttackers(room, botIdx, difficulty);
-    room.attackers = attackerUids;
-    room.players[botIdx].battlefield = room.players[botIdx].battlefield.map(c =>
-      attackerUids.includes(c.uid) ? { ...c, tapped: true } : c
-    );
-
-    if (attackerUids.length === 0) {
-      addLog(room, `🛡️ ${room.players[botIdx].name} não ataca`, "info");
-      room.combatPhase = null;
-    } else {
-      addLog(room, `⚔️ ${room.players[botIdx].name} ataca com ${attackerUids.length} criatura(s)!`, "combat");
-      room.combatPhase = "declare_blockers";
-      broadcastRoom(room);
-      // Jogador humano tem tempo para bloquear
-      await step(()=>{}, delay * 3);
-
-      // Se humano não bloqueou, bot resolve
-      if (rooms[room.code] && room.combatPhase === "declare_blockers") {
-        addLog(room, `🛡️ Bloqueio confirmado`, "combat");
-        resolveCombat(room);
-        checkWinner(room);
-        if (room.winner !== null) { broadcastRoom(room); return; }
-      }
-    }
-    broadcastRoom(room);
-    await step(()=>{}, delay);
-
-    // MAIN2
-    botTapAllLands(room, botIdx);
-    const card2 = botChooseSpell(room, botIdx, difficulty);
-    if (card2) {
-      const bot = room.players[botIdx];
-      bot.manaPool = payMana(card2.cost || {}, bot.manaPool);
-      bot.hand = bot.hand.filter(c => c.uid !== card2.uid);
-      if (card2.type === "creature") {
-        bot.battlefield.push({ ...card2, uid: mkuid(), tapped: false, summoningSick: true, damage: 0 });
-        addLog(room, `🐉 ${bot.name} convoca ${card2.name}`, "play");
-      } else {
-        bot.graveyard.push(card2);
-        addLog(room, `🪄 ${bot.name} lança ${card2.name}`, "spell");
-        resolveEffect(room, card2, botIdx, null);
-      }
-      checkWinner(room);
-      broadcastRoom(room);
-      if (room.winner !== null) return;
-      await step(()=>{}, delay);
-    }
-
-    // END
-    const ap = room.players[botIdx];
-    if (ap.hand.length > 7) {
-      const excess = ap.hand.length - 7;
-      ap.graveyard.push(...ap.hand.splice(7, excess));
-      addLog(room, `✋ ${ap.name} descartou ${excess} carta(s)`, "info");
-    }
-
-    // Passa turno para o humano
-    room.turn = 1 - botIdx;
-    room.step = "untap";
-    room.combatPhase = null;
-    room.attackers = [];
-    room.blockers = {};
-    if (room.turn === 0) room.turnNumber++;
-    room.players[room.turn] = untapAll(room.players[room.turn]);
-    // Não compra aqui — humano clica em "Comprar" na fase draw
-    room.step = "upkeep";
-    addLog(room, `🔄 Turno ${room.turnNumber} — ${room.players[room.turn].name}`, "system");
-    broadcastRoom(room);
+  const saveSession = (code, name, colors) => {
+    sessionStorage.setItem("mtg_room", code);
+    sessionStorage.setItem("mtg_name", name);
+    sessionStorage.setItem("mtg_colors", JSON.stringify(colors));
   };
 
-  doTurn().catch(e => console.error("Bot error:", e));
+  const emit = useCallback((ev, data) => { if (socket) socket.emit(ev, data); }, [socket]);
+
+  const me = gs ? gs.players[myIndex] : null;
+  const opp = gs ? gs.players[1-myIndex] : null;
+  const isMy = gs && gs.turn === myIndex;
+  const isDef = gs && gs.turn !== myIndex;
+  const step = gs?.step;
+  const cp = gs?.combatPhase;
+  const atks = gs?.attackers || [];
+  const blks = gs?.blockers || {};
+  const isMobile = window.innerWidth <= 900 || !window.matchMedia("(hover: hover)").matches;
+  const [cardPopup, setCardPopup] = useState(null);
+
+  const affordable = (card) => {
+    if (!me || card.type==="land") return true;
+    const pool = {...me.manaPool};
+    for (const [k,v] of Object.entries(card.cost||{})) {
+      if (k==="generic"||typeof v!=="number") continue;
+      if ((pool[k]||0)<v) return false;
+      pool[k]-=v;
+    }
+    const gen = typeof (card.cost||{}).generic==="number"?(card.cost||{}).generic:0;
+    return Object.values(pool).reduce((a,b)=>a+b,0)>=gen;
+  };
+
+  const isVsBot = gs && gs.isBot;
+  const canPlayInstant = (card) => card.type === "instant" && affordable(card);
+
+  const getTargetMode = (card) => {
+    const t = card.targeting;
+    if (!t) {
+      // Inferir pelo effect se não tiver targeting explícito
+      if (card.effect === "pump_creature") return "my";
+      if (["deal_3_damage","deal_x_damage"].includes(card.effect)) return "any";
+      if (["destroy_creature","exile_creature"].includes(card.effect)) return "opp";
+      return null;
+    }
+    if (t === "any") return "any";
+    if (t === "opp_creature" || t === "opp_creature_nonblack") return "opp";
+    if (t === "my_creature") return "my";
+    return "opp";
+  };
+
+  const clickHand = (card) => {
+    if (!isMy && !(isVsBot && canPlayInstant(card))) return;
+    if (isMobile) { setCardPopup({card, from:"hand"}); return; }
+    if (card.type==="land") { if (["main1","main2"].includes(step)) emit("play_land",{cardUid:card.uid}); return; }
+    if (!isMy && !canPlayInstant(card)) return;
+    if (isMy && !["main1","main2","combat"].includes(step) && card.type!=="instant") return;
+    if (!affordable(card)) { showError("Mana insuficiente!"); return; }
+    const tMode = getTargetMode(card);
+    if (tMode) { setSelCard(card.uid); setTargetMode(tMode); }
+    else emit("cast_card",{cardUid:card.uid});
+  };
+
+  const playCardFromPopup = (card) => {
+    setCardPopup(null);
+    if (card.type==="land") { if (["main1","main2"].includes(step)) emit("play_land",{cardUid:card.uid}); return; }
+    if (!isMy && !canPlayInstant(card)) return;
+    if (isMy && !["main1","main2","combat"].includes(step) && card.type!=="instant") return;
+    if (!affordable(card)) { showError("Mana insuficiente!"); return; }
+    const tMode = getTargetMode(card);
+    if (tMode) { setSelCard(card.uid); setTargetMode(tMode); }
+    else emit("cast_card",{cardUid:card.uid});
+  };
+
+  const clickCreature = (card, isOpp) => {
+    // Se está no modo de selecionar alvo para feitiço
+    if (selCard && targetMode) {
+      const canTarget =
+        (targetMode==="opp" && isOpp) ||
+        (targetMode==="any" && isOpp) ||    // "any" permite criatura oponente
+        (targetMode==="my" && !isOpp);
+      if (canTarget) {
+        emit("cast_card",{cardUid:selCard,targetUid:card.uid});
+        setSelCard(null); setTargetMode(null);
+      }
+      return;
+    }
+    // Llanowar Elves e tap_mana — só fora do combate
+    if (isMy && !isOpp && card.abilities && card.abilities.includes("tap_mana") && !card.tapped && !card.summoningSick && cp !== "declare_attackers") {
+      emit("tap_creature", {cardUid: card.uid});
+      return;
+    }
+    // Shivan Dragon pump_R — só no próprio turno
+    if (isMy && !isOpp && card.abilities && card.abilities.includes("pump_R") && (me.manaPool?.R||0) >= 1) {
+      emit("pump_creature_ability", {cardUid: card.uid});
+      return;
+    }
+    // Selecionar atacante
+    if (isMy && cp==="declare_attackers" && !isOpp) {
+      if (card.tapped || card.summoningSick) {
+        showError(card.summoningSick ? "💤 Doença de invocação! Espere o próximo turno." : "Criatura já está virada!");
+        return;
+      }
+      emit("toggle_attacker",{cardUid:card.uid});
+      return;
+    }
+    // Selecionar bloqueador
+    if (isDef && cp==="declare_blockers" && !isOpp && atks.length>0) {
+      const first = atks.find(a=>!blks[a]);
+      if (first) emit("toggle_blocker",{blockerUid:card.uid,attackerUid:first});
+    }
+  };
+
+  if (screen==="menu") return <Menu name={playerName} setName={setPlayerName} colors={selColors} setColors={setSelColors} code={joinCode} setCode={setJoinCode} error={error}
+    onCreate={()=>{ if(!playerName.trim()){showError("Digite seu nome!");return;} const s=connect(); s.on("room_created",({code})=>{ saveSession(code,playerName,selColors); }); s.emit("create_room",{name:playerName,colors:selColors}); s.emit("set_player_info",{name:playerName,colors:selColors}); }}
+    onJoin={()=>{ if(!playerName.trim()||!joinCode.trim()){showError("Preencha nome e código!");return;} const s=connect(); saveSession(joinCode.trim().toUpperCase(),playerName,selColors); s.emit("join_room",{code:joinCode.trim().toUpperCase(),name:playerName,colors:selColors}); }}
+    onVsBot={()=>setScreen("difficulty")}
+  />;
+  if (screen==="difficulty") return <DifficultyScreen name={playerName} setName={setPlayerName} colors={selColors} setColors={setSelColors} error={error}
+    onStart={(difficulty)=>{
+      if(!playerName.trim()){showError("Digite seu nome!");return;}
+      const s=connect();
+      s.emit("create_vs_bot",{name:playerName,colors:selColors,difficulty});
+      saveSession("BOT_"+difficulty, playerName, selColors);
+    }}
+    onBack={()=>setScreen("menu")}
+  />;
+  if (screen==="lobby") return <Lobby code={roomCode} msg={waitMsg} />;
+  if (!gs||!me||!opp) return <div style={{color:"#fff",display:"flex",height:"100vh",alignItems:"center",justifyContent:"center",fontFamily:"serif",fontSize:"18px"}}>🔮 Conectando...</div>;
+
+  return (
+    <div style={{fontFamily:"'Cinzel',serif",background:"#060809",height:"100vh",maxHeight:"100vh",color:"#e8d5a3",display:"flex",flexDirection:"column",overflow:"hidden",position:"fixed",top:0,left:0,right:0,bottom:0}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Crimson+Text:ital@1&display=swap');
+        *{box-sizing:border-box;}
+        ::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:#080a0c;} ::-webkit-scrollbar-thumb{background:#2a1e0a;border-radius:2px;}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+        @keyframes atk{0%,100%{box-shadow:0 0 14px #e1705580}50%{box-shadow:0 0 32px #e17055,0 0 8px #ff7040}}
+        @keyframes tgt{0%,100%{box-shadow:0 0 10px #55efc460}50%{box-shadow:0 0 26px #55efc4}}
+        @keyframes fadeIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+        .hcard{transition:transform .18s,box-shadow .18s,border-color .18s;}
+        .bcard{transition:transform .15s,box-shadow .15s;}
+        @media (hover: hover) {
+          .hcard:hover{transform:translateY(-18px) scale(1.07)!important;z-index:200!important;}
+          .bcard:hover{transform:scale(1.1);z-index:60;}
+        }
+        #card-preview { display: flex; }
+        @media (hover: none), (max-width: 900px) {
+          #card-preview { display: none !important; }
+          .step-desc { display: none !important; }
+        }
+      `}</style>
+
+      {/* ZOOM PREVIEW — só no desktop */}
+      {hovered?.name && (
+        <div id="card-preview" style={{position:"fixed",left:"14px",bottom:"160px",zIndex:600,pointerEvents:"none",animation:"fadeIn .12s ease",gap:"10px",alignItems:"flex-start"}}>
+          <div style={{width:"280px",height:"392px",borderRadius:"14px",overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.98),0 0 60px rgba(0,0,0,.7)",border:"2px solid #c9a84c",flexShrink:0}}>
+            <CardImage name={hovered.name} />
+          </div>
+          <div style={{width:"200px",background:"linear-gradient(160deg,#0a0e18,#111820)",border:"1px solid #1e2e40",borderRadius:"12px",padding:"14px",boxShadow:"0 12px 40px rgba(0,0,0,.9)",fontSize:"12px",color:"#c8d8e8",display:"flex",flexDirection:"column",gap:"8px"}}>
+            <div style={{fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"14px",color:"#f0d48a",borderBottom:"1px solid #1e2e40",paddingBottom:"8px",lineHeight:"1.3"}}>{CARD_PT[hovered.name]?.nome || hovered.name}</div>
+            <div style={{fontSize:"10px",color:"#6a8aaa",letterSpacing:".08em"}}>{CARD_PT[hovered.name]?.tipo || tipoPT(hovered)}</div>
+            {hovered.type==="creature" && <div style={{background:"rgba(0,0,0,.5)",border:"1px solid #2a3a4a",borderRadius:"6px",padding:"5px 8px",textAlign:"center",fontFamily:"'Cinzel',serif",fontSize:"18px",color:"#f0d48a",letterSpacing:".1em"}}>{hovered.power}/{hovered.toughness}</div>}
+            {hovered.cost && <div style={{display:"flex",flexWrap:"wrap",gap:"3px",alignItems:"center"}}><span style={{fontSize:"10px",color:"#4a6a8a",marginRight:"3px"}}>Custo:</span>{custoIcones(hovered.cost)}</div>}
+            {(hovered.abilities?.length > 0) && <div style={{display:"flex",flexWrap:"wrap",gap:"4px"}}>{hovered.abilities.map(a=><span key={a} style={{background:"rgba(255,200,80,.08)",border:"1px solid #3a2a08",borderRadius:"4px",padding:"2px 6px",fontSize:"10px",color:"#d4a030"}}>{ABILITY_PT[a]||a}</span>)}</div>}
+            {hovered.effect && <div style={{fontSize:"11px",color:"#90b8d0",lineHeight:"1.5",background:"rgba(0,0,0,.4)",borderRadius:"6px",padding:"6px 8px",borderLeft:"2px solid #2a5070"}}>{EFFECT_PT[hovered.effect] || hovered.effect}</div>}
+            {hovered.type==="land" && hovered.produces && <div style={{fontSize:"11px",color:"#70c090"}}>✨ Produz: {hovered.produces.map(m=>MANA_NOME[m]).join(", ")}</div>}
+            <div style={{fontSize:"10px",color:"#2a4a6a",textTransform:"uppercase",letterSpacing:".1em",marginTop:"2px"}}>{RARITY_PT[hovered.rarity]||""}</div>
+          </div>
+        </div>
+      )}
+
+      {/* ── POPUP DE CARTA (mobile) ── */}
+      {cardPopup && (
+        <div onClick={()=>setCardPopup(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.85)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",gap:"14px",padding:"16px"}}>
+          <div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:"12px",alignItems:"flex-start",maxWidth:"100%"}}>
+            {/* Imagem grande */}
+            <div style={{width:"min(200px,45vw)",flexShrink:0,borderRadius:"10px",overflow:"hidden",border:"2px solid #c9a84c",boxShadow:"0 0 40px #c9a84c40"}}>
+              <CardImage name={cardPopup.card.name}/>
+            </div>
+            {/* Info + botões */}
+            <div style={{flex:1,display:"flex",flexDirection:"column",gap:"8px",minWidth:0}}>
+              <div style={{fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"14px",color:"#f0d48a"}}>{CARD_PT[cardPopup.card.name]?.nome||cardPopup.card.name}</div>
+              <div style={{fontSize:"10px",color:"#6a8aaa"}}>{CARD_PT[cardPopup.card.name]?.tipo||tipoPT(cardPopup.card)}</div>
+              {cardPopup.card.type==="creature"&&<div style={{fontSize:"16px",color:"#f0d48a",fontWeight:"bold"}}>{cardPopup.card.power}/{cardPopup.card.toughness}</div>}
+              {cardPopup.card.cost&&<div style={{display:"flex",gap:"3px",alignItems:"center",flexWrap:"wrap"}}><span style={{fontSize:"9px",color:"#4a6a8a"}}>Custo:</span>{custoIcones(cardPopup.card.cost)}</div>}
+              {cardPopup.card.abilities?.length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:"3px"}}>{cardPopup.card.abilities.map(a=><span key={a} style={{background:"rgba(255,200,80,.1)",border:"1px solid #3a2a08",borderRadius:"4px",padding:"2px 5px",fontSize:"9px",color:"#d4a030"}}>{ABILITY_PT[a]||a}</span>)}</div>}
+              {cardPopup.card.effect&&<div style={{fontSize:"10px",color:"#90b8d0",lineHeight:"1.4",background:"rgba(0,0,0,.4)",borderRadius:"5px",padding:"5px 7px",borderLeft:"2px solid #2a5070"}}>{EFFECT_PT[cardPopup.card.effect]||cardPopup.card.effect}</div>}
+              {/* Botões de ação */}
+              <div style={{display:"flex",flexDirection:"column",gap:"6px",marginTop:"4px"}}>
+                {cardPopup.from==="hand"&&(isMy||(isVsBot&&cardPopup.card.type==="instant"))&&(
+                  affordable(cardPopup.card)
+                    ? <>
+                        <button onClick={()=>playCardFromPopup(cardPopup.card)} style={{background:"linear-gradient(135deg,#0a2008,#1a4010)",border:"2px solid #4ade80",color:"#4ade80",padding:"10px",borderRadius:"8px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",fontWeight:"700"}}>
+                          {cardPopup.card.type==="land"?"🌍 Jogar Terra":"✨ Lançar (escolher alvo)"}
+                        </button>
+                        {/* Se targeting=any, também mostra botão de dano direto */}
+                        {cardPopup.card.targeting==="any"&&<button onClick={()=>{setCardPopup(null);if(!affordable(cardPopup.card)){showError("Mana insuficiente!");return;}emit("cast_card",{cardUid:cardPopup.card.uid,targetUid:"player"});}} style={{background:"linear-gradient(135deg,#300808,#500c0c)",border:"2px solid #e17055",color:"#ff8888",padding:"10px",borderRadius:"8px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",fontWeight:"700"}}>⚡ Dano Direto ao Jogador</button>}
+                      </>
+                    : <div style={{fontSize:"11px",color:"#ff8888",textAlign:"center",padding:"8px",background:"rgba(80,0,0,.4)",borderRadius:"6px"}}>⚠️ Mana insuficiente</div>
+                )}
+                {/* Botões de habilidade para criaturas em campo */}
+                {cardPopup.from==="my"&&isMy&&(
+                  <>
+                    {(cardPopup.card.abilities||[]).includes("tap_mana")&&!cardPopup.card.tapped&&!cardPopup.card.summoningSick&&<button onClick={()=>{setCardPopup(null);emit("tap_creature",{cardUid:cardPopup.card.uid});}} style={{background:"linear-gradient(135deg,#0a2008,#1a4010)",border:"2px solid #4ade80",color:"#4ade80",padding:"10px",borderRadius:"8px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"12px"}}>🌿 Toque → +1 Mana Verde</button>}
+                    {(cardPopup.card.abilities||[]).includes("pump_R")&&(me.manaPool?.R||0)>=1&&<button onClick={()=>{setCardPopup(null);emit("pump_creature_ability",{cardUid:cardPopup.card.uid});}} style={{background:"linear-gradient(135deg,#200808,#501010)",border:"2px solid #e17055",color:"#ff9977",padding:"10px",borderRadius:"8px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"12px"}}>🔥 Ativar: +1/+0 (gasta R)</button>}
+                  </>
+                )}
+                <button onClick={()=>setCardPopup(null)} style={{background:"rgba(0,0,0,.5)",border:"1px solid #2a2a3a",color:"#8a8aaa",padding:"8px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"12px"}}>✕ Fechar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{background:"linear-gradient(180deg,#070e1c,#0b1626)",borderBottom:"2px solid #0c1b2e",padding:"2px 8px",flexShrink:0}}>
+        <PBar player={opp} active={!isMy} onDirectDmg={targetMode==="any" ? ()=>{ emit("cast_card",{cardUid:selCard,targetUid:"player"}); setSelCard(null); setTargetMode(null); } : null} />
+        <div style={{display:"flex",gap:"2px",marginBottom:"2px",justifyContent:"flex-end"}}>
+          {opp.hand.map((_,i)=><div key={i} style={{width:"clamp(18px,3.5vw,28px)",height:"clamp(25px,5vh,38px)",borderRadius:"3px",background:"linear-gradient(135deg,#18284a,#0c1630)",border:"1px solid #1a3058",flexShrink:0}}/>)}
+        </div>
+        <div style={{display:"flex",gap:"3px",flexWrap:"nowrap",overflowX:"auto",minHeight:"clamp(48px,11vh,75px)",alignItems:"center",paddingBottom:"2px"}}>
+          {opp.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>isMobile&&setCardPopup({card:c,from:"opp"})} onHov={setHoveredDelayed} small/>)}
+          {opp.battlefield.filter(c=>c.type==="land").length>0&&opp.battlefield.filter(c=>c.type!=="land").length>0&&<div style={{width:"1px",height:"45px",background:"#0e1d2e",flexShrink:0}}/>}
+          {opp.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="opp"||targetMode==="any"} onClick={()=>{ if(isMobile&&!selCard) setCardPopup({card:c,from:"opp"}); else clickCreature(c,true); }} onHov={setHoveredDelayed} small/>)}
+        </div>
+      </div>
+
+      {/* ── CENTER ── */}
+      <div style={{flex:1,display:"flex",gap:"6px",padding:"3px 8px",background:"radial-gradient(ellipse at center,#08130a,#030604)",minHeight:0,overflow:"hidden",alignItems:"stretch"}}>
+        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:"4px",alignItems:"center",justifyContent:"center",overflowY:"auto"}}>
+          {me.battlefield.filter(c=>c.type!=="land").map(c=><BCard key={c.uid} card={c} atk={atks.includes(c.uid)} blk={Object.values(blks).includes(c.uid)} tgt={targetMode==="my"} onClick={()=>{ if(isMobile&&!selCard&&cp!=="declare_attackers"&&cp!=="declare_blockers") setCardPopup({card:c,from:"my"}); else clickCreature(c,false); }} onHov={setHoveredDelayed}/>)}
+        </div>
+        {!isMobile && <div style={{width:"225px",flexShrink:0,display:"flex",flexDirection:"column",gap:"3px",justifyContent:"center",overflowY:"auto"}}>
+          <Steps step={step} turn={gs.turn} tn={gs.turnNumber} mi={myIndex}/>
+          <Mana pool={me.manaPool}/>
+          {error&&<div style={{background:"#280606",border:"1px solid #a03030",borderRadius:"4px",padding:"2px 6px",fontSize:"9px",color:"#ff8888",textAlign:"center"}}>{error}</div>}
+          {selCard&&targetMode&&<div style={{background:"#081a06",border:"1px solid #408030",borderRadius:"4px",padding:"4px 6px",fontSize:"9px",color:"#70c050",textAlign:"center"}}>
+            🎯 {targetMode==="any"?"Clique numa criatura ou no ❤️ do oponente":targetMode==="my"?"Clique numa sua criatura":"Clique numa criatura inimiga"}
+            {targetMode==="any"&&<button onClick={()=>{emit("cast_card",{cardUid:selCard,targetUid:"player"});setSelCard(null);setTargetMode(null);}} style={{display:"block",width:"100%",marginTop:"4px",background:"linear-gradient(135deg,#300808,#500c0c)",border:"1px solid #e17055",color:"#ff8888",padding:"4px",borderRadius:"4px",cursor:"pointer",fontSize:"9px",fontFamily:"'Cinzel',serif"}}>⚡ Atacar Jogador Diretamente</button>}
+            <button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{display:"block",width:"100%",marginTop:"3px",background:"none",border:"none",color:"#ff6666",cursor:"pointer",fontSize:"9px"}}>✕ Cancelar</button>
+          </div>}
+          <div style={{display:"flex",flexDirection:"column",gap:"3px"}}>
+            {isMy&&!cp&&<>
+              {step==="untap"&&<button style={btn("#74b9ff","#030c18",true)} onClick={()=>emit("advance_step")}>🔄 Desvirar</button>}
+              {step==="upkeep"&&<button style={btn("#a29bfe","#080318",true)} onClick={()=>emit("advance_step")}>⬆️ Manutenção</button>}
+              {step==="draw"&&<button style={btn("#55efc4","#031208",true)} onClick={()=>emit("draw_card")}>📖 Comprar</button>}
+              {step==="main1"&&<><button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>⚔️ Combate</button><button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar</button></>}
+              {step==="main2"&&<><button style={btn("#fdcb6e","#120a01",true)} onClick={()=>emit("advance_step")}>🌙 Fim</button><button style={btn("#636e72","#080808",true)} onClick={()=>emit("skip_to_end")}>⏭️ Passar</button></>}
+              {step==="end"&&<button style={btn("#636e72","#0a0b0c",true)} onClick={()=>emit("advance_step")}>→ Oponente</button>}
+            </>}
+            {isMy&&cp==="declare_attackers"&&<><div style={{fontSize:"9px",color:"#e17055",textAlign:"center"}}>{atks.length>0?`⚔️ ${atks.length} atacante(s)`:"🛡️ Sem ataque"}</div><button style={{...btn("#e17055","#150601",true),animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️ {atks.length>0?`Atacar (${atks.length})`:"Pular"}</button></>}
+            {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️ Bloquear</button>}
+            {!isMy&&!cp&&<div style={{fontSize:"9px",color:"#2a4a6a",fontStyle:"italic",textAlign:"center",animation:"pulse 2s infinite"}}>⏳ Aguardando...</div>}
+          </div>
+        </div>}
+        {!isMobile && <div ref={logRef} style={{width:"160px",flexShrink:0,overflowY:"auto",overflowX:"hidden",background:"rgba(0,0,0,.8)",border:"1px solid #121a22",borderRadius:"5px",padding:"4px 6px",fontSize:"8px",lineHeight:"1.5",alignSelf:"stretch"}}>
+          {(gs.log||[]).map((l,i)=><div key={l.id||i} style={{color:logColor(l.type),marginBottom:"1px",wordBreak:"break-word"}}>{l.msg}</div>)}
+        </div>}
+      </div>
+
+      {/* ── MOBILE ACTION BAR ── */}
+      {isMobile && <div style={{background:"linear-gradient(0deg,#080f20,#0c1630)",borderTop:"2px solid #1a2a4a",borderBottom:"2px solid #1a2a4a",padding:"6px 12px",flexShrink:0}}>
+        <div style={{display:"flex",gap:"6px",alignItems:"center",justifyContent:"center"}}>
+          <Mana pool={me.manaPool} compact/>
+          <div style={{width:"1px",height:"24px",background:"#1a2a3a",flexShrink:0}}/>
+          <div style={{fontSize:"11px",color:gs.turn===myIndex?"#f0d48a":"#3a5a7a",fontWeight:"700",flexShrink:0}}>
+            {gs.turn===myIndex?"":"⏳ "}{STEP_LABELS[step]}
+          </div>
+          <div style={{width:"1px",height:"24px",background:"#1a2a3a",flexShrink:0}}/>
+          <div style={{display:"flex",gap:"5px",alignItems:"center"}}>
+            {error&&<div style={{fontSize:"9px",color:"#ff8888",padding:"2px 5px",background:"rgba(80,0,0,.5)",borderRadius:"4px",maxWidth:"90px"}}>{error}</div>}
+            {selCard&&targetMode&&<>
+              {targetMode==="any"&&<button onClick={()=>{emit("cast_card",{cardUid:selCard,targetUid:"player"});setSelCard(null);setTargetMode(null);}} style={{background:"linear-gradient(135deg,#300808,#500c0c)",border:"1px solid #e17055",color:"#ff8888",padding:"7px 10px",borderRadius:"6px",cursor:"pointer",fontSize:"11px",fontFamily:"'Cinzel',serif"}}>⚡ Jogador</button>}
+              <button onClick={()=>{setSelCard(null);setTargetMode(null);}} style={{background:"rgba(80,0,0,.5)",border:"1px solid #ff4444",color:"#ff8888",padding:"7px 10px",borderRadius:"6px",cursor:"pointer",fontSize:"12px"}}>✕</button>
+            </>}
+            {isMy&&!cp&&<>
+              {step==="untap"&&<button style={{...btn("#74b9ff","#030c18",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>🔄</button>}
+              {step==="upkeep"&&<button style={{...btn("#a29bfe","#080318",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>⬆️</button>}
+              {step==="draw"&&<button style={{...btn("#55efc4","#031208",true),padding:"8px 18px",fontSize:"13px",fontWeight:"bold"}} onClick={()=>emit("draw_card")}>📖 Comprar</button>}
+              {step==="main1"&&<>
+                <button style={{...btn("#fdcb6e","#120a01",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>⚔️</button>
+                <button style={{...btn("#636e72","#080808",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("skip_to_end")}>⏭️</button>
+              </>}
+              {step==="main2"&&<>
+                <button style={{...btn("#fdcb6e","#120a01",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>🌙</button>
+                <button style={{...btn("#636e72","#080808",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("skip_to_end")}>⏭️</button>
+              </>}
+              {step==="end"&&<button style={{...btn("#636e72","#0a0b0c",true),padding:"8px 14px",fontSize:"14px"}} onClick={()=>emit("advance_step")}>→</button>}
+            </>}
+            {isMy&&cp==="declare_attackers"&&<button style={{...btn("#e17055","#150601",true),padding:"8px 14px",fontSize:"14px",animation:atks.length>0?"atk 1.5s infinite":"none"}} onClick={()=>emit("declare_attackers")}>⚔️{atks.length>0?" "+atks.length:""}</button>}
+            {isDef&&cp==="declare_blockers"&&<button style={{...btn("#74b9ff","#010610",true),padding:"8px 14px",fontSize:"14px",animation:"tgt 1.5s infinite"}} onClick={()=>emit("declare_blockers")}>🛡️</button>}
+            {!isMy&&!cp&&<div style={{fontSize:"12px",color:"#2a4a6a"}}>⏳</div>}
+          </div>
+        </div>
+      </div>}
+
+      {/* ── MY LANDS ── */}
+      <div style={{background:"linear-gradient(0deg,#070e1c,#0b1626)",borderTop:"2px solid #0c1b2e",padding:"2px 8px",flexShrink:0}}>
+        <div style={{display:"flex",gap:"4px",alignItems:"center",flexWrap:"nowrap"}}>
+          <PBar player={me} active={isMy} compact/>
+          <div style={{display:"flex",gap:"3px",flexWrap:"nowrap",marginLeft:"5px",overflowX:"auto",flex:1,alignItems:"center"}}>
+            {me.battlefield.filter(c=>c.type==="land").map(c=><BCard key={c.uid} card={c} atk={false} blk={false} tgt={false} onClick={()=>{if(isMy)emit("tap_land",{cardUid:c.uid});}} onHov={setHoveredDelayed} small/>)}
+          </div>
+          <div style={{flexShrink:0,fontSize:"8px",color:"#2a3a4a",whiteSpace:"nowrap"}}>📚{me.deck?.length||0} 🪦{me.graveyard?.length||0} {me.hand?.length>7&&<span style={{color:"#ff8888",fontWeight:"bold"}}>✋{me.hand.length}/7!</span>}</div>
+        </div>
+      </div>
+
+      {/* ── HAND ── */}
+      <div style={{background:"#030405",borderTop:"1px solid #090c10",padding:"4px 8px 6px",flexShrink:0}} onMouseLeave={()=>setHoveredDelayed(null)}>
+        <div style={{display:"flex",gap:"4px",overflowX:"auto",alignItems:"center",paddingBottom:"2px"}}>
+          {me.hand.map(card=><HCard key={card.uid} card={card} sel={selCard===card.uid} can={affordable(card)} myTurn={isMy || (isVsBot && card.type==="instant")} step={step} onClick={()=>clickHand(card)} onHov={setHoveredDelayed} mobile={isMobile}/>)}
+          {me.hand.length===0&&<div style={{color:"#151008",fontSize:"11px",padding:"16px",fontStyle:"italic"}}>Sem cartas na mão</div>}
+        </div>
+      </div>
+
+      {/* WINNER */}
+      {gs.winner!==null&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}}>
+          <div style={{textAlign:"center",padding:"48px",background:"linear-gradient(135deg,#0a1220,#162030)",border:"2px solid #c9a84c",borderRadius:"16px",maxWidth:"420px",animation:"fadeIn .4s ease"}}>
+            <div style={{fontSize:"80px",marginBottom:"14px"}}>{gs.winner===myIndex?"🏆":"💀"}</div>
+            <h1 style={{fontSize:"40px",fontWeight:"900",background:gs.winner===myIndex?"linear-gradient(180deg,#f0d48a,#c9a84c)":"linear-gradient(180deg,#ff8888,#c03030)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:"0 0 10px"}}>
+              {gs.winner===myIndex?"VITÓRIA!":"DERROTA"}
+            </h1>
+            <div style={{display:"flex",gap:"16px",justifyContent:"center",margin:"20px 0"}}>
+              {gs.players.map((p,i)=><div key={i} style={{background:"rgba(0,0,0,.5)",border:`1px solid ${i===gs.winner?"#4ade80":"#f87171"}`,borderRadius:"10px",padding:"12px 20px",textAlign:"center"}}>
+                <div style={{fontSize:"11px",color:"#c9a84c",marginBottom:"5px"}}>{p.name}</div>
+                <div style={{fontSize:"22px",color:p.life>0?"#4ade80":"#f87171",fontWeight:"bold"}}>❤️ {p.life}</div>
+              </div>)}
+            </div>
+            <button onClick={()=>{ sessionStorage.removeItem("mtg_room"); window.location.reload(); }} style={{background:"linear-gradient(135deg,#160a02,#3a2005)",border:"2px solid #c9a84c",color:"#f0d48a",padding:"12px 36px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"15px",letterSpacing:".1em"}}>🔄 Jogar Novamente</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Player Bar ──
+function PBar({player,active,compact,onDirectDmg}) {
+  const lc = player.life>10?"#4ade80":player.life>5?"#facc15":"#f87171";
+  const isDmgTarget = !!onDirectDmg;
+  return (
+    <div onClick={onDirectDmg||undefined}
+      style={{display:"flex",alignItems:"center",gap:"10px",padding:compact?"1px 0":"3px 0",
+        cursor:isDmgTarget?"crosshair":"default",
+        outline:isDmgTarget?"2px solid #ff6644":"none",outlineOffset:"3px",
+        borderRadius:"6px",transition:"outline .2s"}}>
+      <div style={{fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:compact?"11px":"13px",color:active?"#f0d48a":"#3a2a12",minWidth:"95px",transition:"color .3s"}}>
+        {active&&<span style={{color:"#4ade80",marginRight:"5px",animation:"pulse 1s infinite"}}>●</span>}{player.name}
+        {isDmgTarget&&<span style={{marginLeft:"6px",fontSize:"11px",color:"#ff6644",animation:"pulse 1s infinite"}}>🎯</span>}
+      </div>
+      <div style={{background:"rgba(0,0,0,.6)",border:`1.5px solid ${isDmgTarget?"#ff6644":lc}`,borderRadius:"7px",padding:"2px 10px",display:"flex",alignItems:"center",gap:"4px",boxShadow:`0 0 10px ${isDmgTarget?"#ff664440":lc+"30"}`}}>
+        <span>❤️</span><span style={{color:isDmgTarget?"#ff8844":lc,fontWeight:"bold",fontSize:"16px",fontFamily:"'Cinzel',serif"}}>{player.life}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Mana ──
+function Mana({pool, compact=false}) {
+  const types=[{k:"W",e:"☀️"},{k:"U",e:"💧"},{k:"B",e:"💀"},{k:"R",e:"🔥"},{k:"G",e:"🌿"}];
+  const tot=Object.values(pool||{}).reduce((a,b)=>a+b,0);
+  if(!tot) return <div style={{fontSize:"9px",color:"#100a04",textAlign:"center"}}>0 mana</div>;
+  if(compact) return <div style={{display:"flex",gap:"2px",alignItems:"center"}}>
+    {types.map(({k,e})=>(pool[k]||0)>0&&<div key={k} style={{background:"rgba(0,0,0,.6)",border:"1px solid #1a2a3a",borderRadius:"8px",padding:"1px 4px",fontSize:"10px"}}>{e}{pool[k]>1&&<span style={{fontSize:"9px",color:"#f0d48a"}}>{pool[k]}</span>}</div>)}
+  </div>;
+  return <div style={{display:"flex",flexWrap:"wrap",gap:"3px",justifyContent:"center"}}>
+    {types.map(({k,e})=>(pool[k]||0)>0&&<div key={k} style={{background:"rgba(0,0,0,.6)",border:"1px solid #1a2a3a",borderRadius:"10px",padding:"2px 6px",fontSize:"11px"}}>{Array(pool[k]).fill(0).map((_,i)=><span key={i}>{e}</span>)}</div>)}
+  </div>;
+}
+
+// ── Step Tracker com tooltip ──
+const STEP_DESC = {
+  untap:  "Todas as suas permanentes desviram (ficam na posição normal).",
+  upkeep: "Fase de manutenção. Efeitos que acontecem 'no início do turno' ocorrem aqui.",
+  draw:   "Compre uma carta do topo do seu deck.",
+  main1:  "Jogue terrenos, invoque criaturas e lance feitiços antes do combate.",
+  combat: "Declare quais criaturas vão atacar. O oponente poderá bloquear.",
+  main2:  "Fase principal após o combate. Lance mais feitiços ou invoque criaturas.",
+  end:    "Fim do turno. Descarte se tiver mais de 7 cartas na mão.",
 };
 
+function Steps({step, turn, tn, mi}) {
+  const [tooltip, setTooltip] = useState(null);
+  const ss = ["untap","upkeep","draw","main1","combat","main2","end"];
+  const ic = {untap:"🔄",upkeep:"⬆️",draw:"📖",main1:"1",combat:"⚔️",main2:"2",end:"🌙"};
+  return (
+    <div style={{textAlign:"center"}}>
+      <div style={{fontSize:"11px",color:turn===mi?"#f0d48a":"#3a5a7a",letterSpacing:".07em",marginBottom:"4px",fontWeight:"600"}}>
+        T{tn} — {turn===mi?"SEU TURNO":"OPONENTE"}
+      </div>
+      <div style={{display:"flex",gap:"2px",justifyContent:"center",position:"relative"}}>
+        {ss.map(s=>(
+          <div key={s} onMouseEnter={()=>setTooltip(s)} onMouseLeave={()=>setTooltip(null)}
+            style={{width:"22px",height:"22px",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:"10px",background:s===step?STEP_COLORS[s]:"rgba(0,0,0,.5)",
+              border:`1px solid ${s===step?STEP_COLORS[s]:"#14202e"}`,
+              boxShadow:s===step?`0 0 10px ${STEP_COLORS[s]}`:"none",transition:"all .3s",cursor:"help"}}>
+            {ic[s]}
+          </div>
+        ))}
+      </div>
+      {/* Caixa de descrição da fase — escondida em mobile */}
+      <div style={{marginTop:"4px",background:"rgba(0,0,0,.5)",border:`1px solid ${STEP_COLORS[tooltip||step]||"#1a2a3a"}`,borderRadius:"6px",padding:"5px 7px",fontSize:"9px",color:"#8ab0c8",lineHeight:"1.4",transition:"border-color .2s",wordBreak:"break-word",overflowWrap:"break-word",textAlign:"left"}} className="step-desc">
+        <div style={{color:STEP_COLORS[tooltip||step],fontWeight:"700",fontSize:"9px",marginBottom:"1px"}}>{STEP_LABELS[tooltip||step]}</div>
+        <div>{STEP_DESC[tooltip||step]}</div>
+      </div>
+    </div>
+  );
+}
 
-io.on("connection", (socket) => {
-  console.log("Connected:", socket.id);
+// ── Battlefield Card ──
+function BCard({card,atk,blk,tgt,onClick,onHov,small=false}) {
+  if(card.hidden) return null;
+  const st=getCardStyle(card);
+  const w = small ? "clamp(44px,9vw,62px)" : "clamp(62px,11vw,86px)";
+  const h = small ? "clamp(62px,13vh,87px)" : "clamp(87px,18vh,120px)";
+  return (
+    <div className="bcard" onClick={onClick}
+      onMouseEnter={()=>onHov&&onHov(card)} onMouseLeave={()=>onHov&&onHov(null)}
+      style={{width:w,height:h,minWidth:w,borderRadius:"7px",background:st.bg,border:`2px solid ${atk?"#e17055":blk?"#74b9ff":tgt?"#55efc4":st.border}`,
+        boxShadow:atk?"0 0 20px #e17055":blk?"0 0 20px #74b9ff":tgt?"0 0 16px #55efc4":"0 4px 14px rgba(0,0,0,.85)",
+        cursor:"pointer",transform:card.tapped?"rotate(90deg)":"none",transition:"transform .3s,box-shadow .2s,border-color .2s",
+        flexShrink:0,position:"relative",filter:card.summoningSick?"brightness(.55)":"none",overflow:"hidden",
+        animation:atk?"atk 1.5s infinite":tgt?"tgt 1.5s infinite":"none"}}>
+      <CardImage name={card.name} style={{borderRadius:"5px"}}/>
+      {card.type==="creature"&&<div style={{position:"absolute",bottom:"2px",right:"3px",background:"rgba(0,0,0,.88)",borderRadius:"3px",padding:"1px 4px",fontSize:small?"9px":"11px",fontWeight:"bold",color:"#f0d48a",fontFamily:"'Cinzel',serif"}}>{card.power}/{card.toughness}</div>}
+      {card.tapped&&<div style={{position:"absolute",top:"2px",left:"2px",fontSize:"7px",background:"rgba(0,0,0,.75)",borderRadius:"3px",padding:"1px 3px"}}>🔄</div>}
+      {card.summoningSick&&<div style={{position:"absolute",top:"2px",right:"2px",fontSize:"7px",background:"rgba(0,0,0,.75)",borderRadius:"3px",padding:"1px 3px"}}>💤</div>}
+    </div>
+  );
+}
 
-  // ── Create VS Bot ──
-  socket.on("create_vs_bot", ({ name, colors, difficulty }) => {
-    const code = genCode();
-    const room = mkRoom(code);
-    room.isBot = true;
-    room.botDifficulty = difficulty || "medium";
-    room.botIdx = 1;
-    rooms[code] = room;
+// ── Hand Card ──
+function HCard({card,sel,can,myTurn,step,onClick,onHov,mobile=false}) {
+  const st=getCardStyle(card);
+  const cmc=calcCMC(card.cost);
+  const play=myTurn&&(card.type==="land"?["main1","main2"].includes(step):["main1","main2","combat"].includes(step));
+  const w = mobile ? "clamp(60px,13vw,85px)" : "min(116px,22vw)";
+  const h = mobile ? "clamp(84px,18vw,119px)" : "min(162px,38vh)";
+  return (
+    <div className={mobile ? "" : "hcard"} onClick={onClick}
+      onMouseEnter={()=>!mobile&&onHov&&onHov(card)} onMouseLeave={()=>!mobile&&onHov&&onHov(null)}
+      style={{minWidth:w,maxWidth:w,height:h,borderRadius:"10px",background:st.bg,
+        border:`2px solid ${sel?"#f0d48a":can&&play?st.border:"#0e0e18"}`,
+        cursor:play?"pointer":"default",
+        boxShadow:sel?"0 0 28px #f0d48a,0 12px 36px rgba(0,0,0,.95)":can&&play?`0 6px 22px rgba(0,0,0,.85),0 0 8px ${st.border}45`:"0 3px 10px rgba(0,0,0,.7)",
+        opacity:!play?0.5:can?1:0.6,flexShrink:0,position:"relative",overflow:"hidden"}}>
+      <CardImage name={card.name} style={{borderRadius:"8px"}}/>
+      {sel&&<div style={{position:"absolute",inset:0,background:"rgba(240,212,138,.12)",borderRadius:"8px",pointerEvents:"none"}}/>}
+      {card.type!=="land"&&<div style={{position:"absolute",top:"4px",right:"4px",background:"rgba(0,0,0,.88)",borderRadius:"50%",width:"20px",height:"20px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"10px",fontWeight:"bold",color:"#f0d48a"}}>{cmc}</div>}
+      {card.type==="creature"&&<div style={{position:"absolute",bottom:"4px",right:"4px",background:"rgba(0,0,0,.88)",borderRadius:"4px",padding:"1px 5px",fontSize:"11px",fontWeight:"bold",color:"#f0d48a",fontFamily:"'Cinzel',serif"}}>{card.power}/{card.toughness}</div>}
+    </div>
+  );
+}
 
-    const botColors = ["R","G","B","W","U"].sort(()=>Math.random()-.5).slice(0,2);
-    const botNames = { random:"Mago Aleatório 🎲", basic:"Aprendiz Arcano 📚", medium:"Feiticeiro Sombrio 🌑", hard:"Arquimago Supremo 💀" };
-    const botName = botNames[difficulty] || "Mago Bot";
+// ── Menu ──
+function Menu({name,setName,colors,setColors,code,setCode,error,onCreate,onJoin,onVsBot}) {
+  const cls=[{k:"W",e:"☀️",n:"Branco"},{k:"U",e:"💧",n:"Azul"},{k:"B",e:"💀",n:"Preto"},{k:"R",e:"🔥",n:"Vermelho"},{k:"G",e:"🌿",n:"Verde"}];
+  const tog=k=>setColors(s=>s.includes(k)?s.filter(x=>x!==k):[...s,k]);
+  const ok = colors.length>0 && name.trim();
+  return (
+    <div style={{position:"fixed",inset:0,background:"radial-gradient(ellipse at 50% 40%,#0c1828,#030710)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",overflowY:"auto",padding:"12px 16px",gap:"10px"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap');`}</style>
 
-    room.players[0] = mkPlayer(socket.id, name, colors);
-    room.players[1] = mkPlayer("BOT", botName, botColors);
-    room.sockets = [socket.id, "BOT"];
+      {/* Logo + Título compacto */}
+      <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
+        <div style={{fontSize:"16px"}}>🎮</div>
+        <div style={{fontWeight:"900",fontSize:"11px",letterSpacing:".3em",background:"linear-gradient(90deg,#4a90d9,#a29bfe)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>DALAS GAMES</div>
+        <div style={{fontSize:"16px"}}>🎮</div>
+      </div>
 
-    socket.join(code);
-    socket.data.roomCode = code;
-    socket.data.playerIndex = 0;
+      <div style={{display:"flex",alignItems:"center",gap:"10px",flexShrink:0}}>
+        <div style={{fontSize:"32px",filter:"drop-shadow(0 0 20px #c9a84c)"}}>⚔️</div>
+        <div>
+          <h1 style={{fontSize:"32px",fontWeight:"900",background:"linear-gradient(180deg,#f0d48a,#c9a84c)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:0,letterSpacing:".05em"}}>MAGIC</h1>
+          <div style={{fontSize:"9px",letterSpacing:".4em",color:"#4a3a1a",textTransform:"uppercase"}}>The Gathering — Multiplayer</div>
+        </div>
+      </div>
 
-    room.step = "untap";
-    room.turn = 0;
-    room.turnNumber = 1;
-    addLog(room, `⚔️ ${name} vs ${botName} — Que a batalha comece!`, "system");
-    // Jogador começa com 7 cartas (já no mkPlayer), não compra extra aqui
-    // Vai para upkeep automaticamente
-    advanceStep(room); // untap → upkeep
-    broadcastRoom(room);
-    console.log(`Bot room ${code}: ${name} vs ${botName} (${difficulty})`);
-  });
+      {/* Nome */}
+      <input value={name} onChange={e=>setName(e.target.value)} placeholder="Seu nome de mago..."
+        style={{background:"rgba(0,0,0,.6)",border:"1px solid #241808",borderRadius:"7px",padding:"9px 14px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"13px",width:"100%",maxWidth:"320px",outline:"none",textAlign:"center",flexShrink:0}}/>
 
-  // ── Declare Blockers (vs Bot — bot resolve automaticamente após humano bloquear) ──
-  socket.on("declare_blockers_human", () => {
-    const code = socket.data.roomCode;
-    const room = rooms[code];
-    if (!room || !room.isBot || room.combatPhase !== "declare_blockers") return;
-    const humanIdx = socket.data.playerIndex;
-    addLog(room, `🛡️ ${room.players[humanIdx].name} declara bloqueadores`, "combat");
-    resolveCombat(room);
-    checkWinner(room);
-    broadcastRoom(room);
-    if (room.winner !== null) return;
-    // Continua o turno do bot após bloqueio
-    room.combatPhase = null;
-  });
+      {/* Cores */}
+      <div style={{flexShrink:0,textAlign:"center"}}>
+        <div style={{fontSize:"9px",color:"#4a3a18",letterSpacing:".15em",marginBottom:"6px"}}>ESCOLHA SUAS CORES (1–3)</div>
+        <div style={{display:"flex",gap:"6px",justifyContent:"center"}}>
+          {cls.map(c=>{const sel=colors.includes(c.k);const st=COLOR_STYLES[c.k];return(
+            <div key={c.k} onClick={()=>tog(c.k)} style={{width:"52px",padding:"7px 4px",borderRadius:"8px",textAlign:"center",cursor:"pointer",background:sel?st.bg:"rgba(0,0,0,.4)",border:`2px solid ${sel?st.border:"#101014"}`,transform:sel?"scale(1.08)":"scale(1)",transition:"all .2s",boxShadow:sel?`0 0 12px ${st.border}50`:"none"}}>
+              <div style={{fontSize:"22px"}}>{c.e}</div>
+              <div style={{fontSize:"8px",color:sel?st.text:"#2a2a38",marginTop:"3px",fontWeight:"600"}}>{c.n}</div>
+            </div>);
+          })}
+        </div>
+      </div>
 
-  // ── Rejoin Room (reconexão após reload) ──
-  socket.on("rejoin_room", ({ code, name }) => {
-    const room = rooms[code?.toUpperCase()];
-    if (!room || room.players.length < 1) {
-      socket.emit("rejoin_failed");
-      return;
-    }
-    // Encontra o jogador pelo nome
-    const idx = room.players.findIndex(p => p.name === name);
-    if (idx === -1) {
-      socket.emit("rejoin_failed");
-      return;
-    }
-    // Reconecta o socket ao jogador
-    const oldSocketId = room.sockets[idx];
-    room.sockets[idx] = socket.id;
-    room.players[idx].socketId = socket.id;
-    socket.join(code.toUpperCase());
-    socket.data.roomCode = code.toUpperCase();
-    socket.data.playerIndex = idx;
-    addLog(room, `🔁 ${name} reconectou!`, "system");
-    broadcastRoom(room);
-    console.log(`${name} rejoined room ${code}`);
-  });
+      {error&&<div style={{color:"#ff8888",fontSize:"11px",background:"rgba(50,0,0,.5)",padding:"5px 12px",borderRadius:"5px",border:"1px solid #703030",flexShrink:0}}>{error}</div>}
 
-  // ── Create Room ──
-socket.on("create_room", ({ name, colors }) => {
-    const code = genCode();
-    const room = mkRoom(code);
-    rooms[code] = room;
-    room.sockets.push(socket.id);
-    room._pending = [{ name, colors }]; // ✅ FIX: salva host no pending imediatamente
-    socket.join(code);
-    socket.data.roomCode = code;
-    socket.data.playerIndex = 0;
-    addLog(room, `🏰 Sala criada. Aguardando oponente...`, "system");
-    socket.emit("room_created", { code });
-    console.log(`Room ${code} created by ${name}`);
-  });
+      {/* Botões multiplayer */}
+      <div style={{display:"flex",gap:"8px",flexWrap:"wrap",justifyContent:"center",flexShrink:0}}>
+        <button onClick={onCreate} disabled={!ok} style={{background:"linear-gradient(135deg,#081804,#163c0c)",border:"2px solid #347020",color:"#68c040",padding:"10px 22px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",opacity:ok?1:0.3}}>🏰 Criar Sala</button>
+        <div style={{display:"flex",gap:"5px",alignItems:"center"}}>
+          <input value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="CÓDIGO" maxLength={5}
+            style={{background:"rgba(0,0,0,.6)",border:"1px solid #201408",borderRadius:"7px",padding:"9px 10px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"14px",width:"95px",outline:"none",textAlign:"center",letterSpacing:".3em"}}/>
+          <button onClick={onJoin} disabled={!code.trim()||!ok} style={{background:"linear-gradient(135deg,#06041c,#10083a)",border:"2px solid #281898",color:"#5840d0",padding:"9px 16px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",opacity:!code.trim()||!ok?0.3:1}}>⚡ Entrar</button>
+        </div>
+      </div>
 
-  // ── Join Room ──
-  socket.on("join_room", ({ code, name, colors }) => {
-    const room = rooms[code.toUpperCase()];
-    if (!room) { socket.emit("error", { msg: "Sala não encontrada!" }); return; }
-    if (room.sockets.length >= 2) { socket.emit("error", { msg: "Sala cheia!" }); return; }
+      {/* VS Bot */}
+      <div style={{width:"100%",maxWidth:"320px",borderTop:"1px solid #1a1208",paddingTop:"10px",display:"flex",flexDirection:"column",alignItems:"center",gap:"6px",flexShrink:0}}>
+        <div style={{fontSize:"9px",color:"#3a2a12",letterSpacing:".2em"}}>— MODO SINGLEPLAYER —</div>
+        <button onClick={onVsBot} disabled={!ok} style={{background:"linear-gradient(135deg,#1a0a20,#3a1050)",border:"2px solid #8a30c0",color:"#c060f0",padding:"10px 30px",borderRadius:"7px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"13px",width:"100%",opacity:ok?1:0.3}}>🤖 Jogar vs Computador</button>
+      </div>
+    </div>
+  );
+}
 
-    socket.join(code.toUpperCase());
-    socket.data.roomCode = code.toUpperCase();
-    socket.data.playerIndex = room.sockets.length;
-    room.sockets.push(socket.id);
+// ── Difficulty Screen ──
+function DifficultyScreen({name,setName,colors,setColors,error,onStart,onBack}) {
+  const cls=[{k:"W",e:"☀️",n:"Branco"},{k:"U",e:"💧",n:"Azul"},{k:"B",e:"💀",n:"Preto"},{k:"R",e:"🔥",n:"Vermelho"},{k:"G",e:"🌿",n:"Verde"}];
+  const tog=k=>setColors(s=>s.includes(k)?s.filter(x=>x!==k):[...s,k]);
+  const difficulties = [
+    { id:"random", icon:"🎲", name:"Aleatório",   desc:"Joga sem estratégia. Bom para aprender.",  color:"#55efc4", bg:"#031a12" },
+    { id:"basic",  icon:"📚", name:"Básico",      desc:"Usa mana e ataca quando tem vantagem.",     color:"#74b9ff", bg:"#010c20" },
+    { id:"medium", icon:"🌑", name:"Médio",       desc:"Considera bloqueios e ameaças.",            color:"#a29bfe", bg:"#08031a" },
+    { id:"hard",   icon:"💀", name:"Difícil",     desc:"Busca combinações letais.",                 color:"#e17055", bg:"#1a0501" },
+  ];
+  const ok = name.trim() && colors.length>0;
+  return (
+    <div style={{position:"fixed",inset:0,background:"radial-gradient(ellipse at 50% 40%,#0c0820,#03020f)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",overflowY:"auto",padding:"10px 16px",gap:"10px"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap'); @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+      <div style={{display:"flex",alignItems:"center",gap:"10px",width:"100%",maxWidth:"400px",flexShrink:0}}>
+        <button onClick={onBack} style={{background:"none",border:"1px solid #2a1a08",color:"#6a5a38",padding:"5px 12px",borderRadius:"5px",cursor:"pointer",fontFamily:"'Cinzel',serif",fontSize:"11px"}}>← Voltar</button>
+        <div style={{flex:1,textAlign:"center"}}>
+          <span style={{fontSize:"20px"}}>🤖</span>
+          <span style={{fontSize:"16px",fontWeight:"900",background:"linear-gradient(180deg,#c060f0,#8a30c0)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",marginLeft:"8px"}}>VS COMPUTADOR</span>
+        </div>
+      </div>
+      <input value={name} onChange={e=>setName(e.target.value)} placeholder="Seu nome de mago..."
+        style={{background:"rgba(0,0,0,.6)",border:"1px solid #2a1030",borderRadius:"7px",padding:"8px 14px",color:"#e8d5a3",fontFamily:"'Cinzel',serif",fontSize:"13px",width:"100%",maxWidth:"320px",outline:"none",textAlign:"center",flexShrink:0}}/>
+      <div style={{flexShrink:0}}>
+        <div style={{textAlign:"center",fontSize:"9px",color:"#4a3a18",letterSpacing:".15em",marginBottom:"6px"}}>SUAS CORES</div>
+        <div style={{display:"flex",gap:"6px",justifyContent:"center"}}>
+          {cls.map(c=>{const sel=colors.includes(c.k);const st=COLOR_STYLES[c.k];return(
+            <div key={c.k} onClick={()=>tog(c.k)} style={{width:"48px",padding:"6px 4px",borderRadius:"7px",textAlign:"center",cursor:"pointer",background:sel?st.bg:"rgba(0,0,0,.4)",border:`2px solid ${sel?st.border:"#101014"}`,transform:sel?"scale(1.08)":"scale(1)",transition:"all .2s"}}>
+              <div style={{fontSize:"20px"}}>{c.e}</div>
+              <div style={{fontSize:"8px",color:sel?st.text:"#2a2a38",marginTop:"2px",fontWeight:"600"}}>{c.n}</div>
+            </div>);})}
+        </div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:"7px",width:"100%",maxWidth:"400px",flexShrink:0}}>
+        {difficulties.map(d=>(
+          <button key={d.id} onClick={()=>onStart(d.id)} disabled={!ok}
+            style={{background:`linear-gradient(135deg,${d.bg},rgba(0,0,0,.8))`,border:`2px solid ${d.color}`,color:d.color,padding:"10px 16px",borderRadius:"9px",cursor:"pointer",fontFamily:"'Cinzel',serif",textAlign:"left",display:"flex",alignItems:"center",gap:"12px",opacity:ok?1:0.3}}>
+            <span style={{fontSize:"22px"}}>{d.icon}</span>
+            <div>
+              <div style={{fontSize:"13px",fontWeight:"700"}}>{d.name}</div>
+              <div style={{fontSize:"9px",color:"rgba(255,255,255,.5)",marginTop:"2px",fontFamily:"serif"}}>{d.desc}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+      {error&&<div style={{color:"#ff8888",fontSize:"11px",flexShrink:0}}>{error}</div>}
+    </div>
+  );
+}
 
-    // Store name+colors temporarily until both joined
-    if (!room._pending) room._pending = [];
-    room._pending.push({ name, colors });
+// ── Lobby ──
+function Lobby({code,msg}) {
+  const [cp,setCp]=useState(false);
+  return (
+    <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at center,#0c1828,#03060f)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"'Cinzel',Georgia,serif",color:"#e8d5a3",gap:"24px"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&display=swap'); @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}`}</style>
+      <div style={{fontSize:"54px",animation:"pulse 1.5s infinite"}}>🔮</div>
+      <h2 style={{fontSize:"20px",letterSpacing:".2em",color:"#c9a84c",margin:0}}>AGUARDANDO OPONENTE</h2>
+      <div onClick={()=>{navigator.clipboard?.writeText(code);setCp(true);setTimeout(()=>setCp(false),2000);}}
+        style={{background:"rgba(0,0,0,.7)",border:"2px solid #c9a84c",borderRadius:"10px",padding:"20px 44px",textAlign:"center",cursor:"pointer",boxShadow:"0 0 32px #c9a84c25",transition:"all .2s"}}>
+        <div style={{fontSize:"11px",color:"#4a3a18",letterSpacing:".2em",marginBottom:"8px"}}>CÓDIGO DA SALA — CLIQUE PARA COPIAR</div>
+        <div style={{fontSize:"42px",fontWeight:"900",letterSpacing:".4em",color:"#f0d48a"}}>{code}</div>
+        {cp&&<div style={{fontSize:"11px",color:"#4ade80",marginTop:"6px"}}>✓ Copiado!</div>}
+      </div>
+      <p style={{color:"#2a3a4a",fontSize:"12px",fontStyle:"italic"}}>{msg}</p>
+    </div>
+  );
+}
 
-    if (room.sockets.length === 2) {
-      // Build both players
-      room.players[0] = mkPlayer(room.sockets[0], room._pending[0].name, room._pending[0].colors);
-      room.players[1] = mkPlayer(room.sockets[1], room._pending[1].name, room._pending[1].colors);
-      room.step = "untap";
-      room.turnNumber = 1;
-      addLog(room, `⚔️ ${room.players[0].name} vs ${room.players[1].name} — Que a batalha comece!`, "system");
-      advanceStep(room); // untap → upkeep (turnNumber=1, não compra)
-      broadcastRoom(room);
-    } else {
-      socket.emit("waiting", { msg: "Aguardando oponente..." });
-    }
-  });
-
-  // ── Set name (for host who created room before opponent joined) ──
-  socket.on("set_player_info", ({ name, colors }) => {
-    const code = socket.data.roomCode;
-    if (!code || !rooms[code]) return;
-    const room = rooms[code];
-    if (!room._pending) room._pending = [];
-    room._pending[0] = { name, colors };
-  });
-
-  // ── Tap Creature (abilities like tap_mana) ──
-  socket.on("tap_creature", ({ cardUid }) => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room || room.turn !== idx) return;
-    const player = room.players[idx];
-    const card = player.battlefield.find(c => c.uid === cardUid);
-    if (!card || card.type !== "creature" || card.tapped || card.summoningSick) return;
-    if (!card.abilities || !card.abilities.includes("tap_mana")) return;
-    // ✅ FIX: Llanowar Elves e similares geram 1 mana verde ao ser virados
-    player.battlefield = player.battlefield.map(c => c.uid === cardUid ? { ...c, tapped: true } : c);
-    player.manaPool.G = (player.manaPool.G || 0) + 1;
-    addLog(room, `🧝 ${player.name} toca ${card.name} → +1 mana verde`, "mana");
-    broadcastRoom(room);
-  });
-
-  // ── Play Land ──
-  socket.on("play_land", ({ cardUid }) => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room || room.turn !== idx || !["main1","main2"].includes(room.step)) return;
-    const player = room.players[idx];
-    if (player.landsPlayedThisTurn >= 1) { socket.emit("error", { msg: "Já jogou terra este turno!" }); return; }
-    const card = player.hand.find(c => c.uid === cardUid);
-    if (!card || card.type !== "land") return;
-    player.hand = player.hand.filter(c => c.uid !== cardUid);
-    const newCard = { ...card, uid: mkuid(), tapped: false };
-    player.battlefield.push(newCard);
-    if (card.produces) card.produces.forEach(m => { player.manaPool[m] = (player.manaPool[m] || 0) + 1; });
-    player.landsPlayedThisTurn++;
-    player.maxMana++;
-    addLog(room, `🏔️ ${player.name} joga ${card.name}`, "play");
-    broadcastRoom(room);
-  });
-
-  // ── Tap Land ──
-  socket.on("tap_land", ({ cardUid }) => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room) return;
-    // Permite virar terra fora do turno apenas em partida vs bot (para lançar instantâneos)
-    if (room.turn !== idx && !room.isBot) return;
-    const player = room.players[idx];
-    const card = player.battlefield.find(c => c.uid === cardUid);
-    if (!card || card.type !== "land" || card.tapped) return;
-    player.battlefield = player.battlefield.map(c => c.uid === cardUid ? { ...c, tapped: true } : c);
-    if (card.produces) card.produces.forEach(m => { player.manaPool[m] = (player.manaPool[m] || 0) + 1; });
-    addLog(room, `✊ ${player.name} toca ${card.name}`, "mana");
-    broadcastRoom(room);
-  });
-
-  // ── Cast Spell/Creature ──
-  socket.on("cast_card", ({ cardUid, targetUid }) => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room) return;
-    const player = room.players[idx];
-    const card = player.hand.find(c => c.uid === cardUid);
-    if (!card || card.type === "land") return;
-
-    const isMyTurn = room.turn === idx;
-    const isInstant = card.type === "instant";
-
-    // Criaturas e sorceries: só no próprio turno, em main1/main2
-    if (!isInstant && (!isMyTurn || !["main1","main2"].includes(room.step))) return;
-    // Instantâneos: pode lançar no próprio turno (qualquer fase) ou no turno do oponente
-    if (isInstant && !isMyTurn && room.isBot) {
-      // OK — permite resposta durante turno do bot
-    } else if (isInstant && !isMyTurn && !room.isBot) {
-      // Multiplayer: por ora só no próprio turno (sem stack implementado)
-      return;
-    } else if (!isInstant && !isMyTurn) {
-      return;
-    }
-
-    if (!canAfford(card, player.manaPool)) { socket.emit("error", { msg: "Mana insuficiente!" }); return; }
-    player.manaPool = payMana(card.cost || {}, player.manaPool);
-    player.hand = player.hand.filter(c => c.uid !== cardUid);
-    if (card.type === "creature") {
-      player.battlefield.push({ ...card, uid: mkuid(), tapped: false, summoningSick: true, damage: 0 });
-      addLog(room, `🐉 ${player.name} convoca ${card.name} (${card.power}/${card.toughness})`, "play");
-    } else {
-      // Fireball: X = todo mana restante na pool
-      let castCard = card;
-      if (card.effect === "deal_x_damage") {
-        const xDmg = Object.values(player.manaPool).reduce((a,b) => a+b, 0);
-        castCard = { ...card, _xDmg: Math.max(1, xDmg) };
-        player.manaPool = { W:0, U:0, B:0, R:0, G:0 }; // gasta todo mana restante
-        addLog(room, `🔥 ${player.name} lança ${card.name} por ${castCard._xDmg} de dano!`, "spell");
-      } else {
-        addLog(room, `🪄 ${player.name} lança ${card.name}`, "spell");
-      }
-      player.graveyard.push(card);
-      resolveEffect(room, castCard, idx, targetUid);
-    }
-    checkWinner(room);
-    broadcastRoom(room);
-  });
-
-  // ── Skip to End (pular combate / passar turno direto) ──
-  socket.on("skip_to_end", () => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room || room.turn !== idx) return;
-    let safety = 0;
-    while (room.step !== "end" && safety++ < 10) advanceStep(room);
-    addLog(room, `⏭️ ${room.players[idx].name} passou o turno`, "info");
-    // Passa para o próximo turno
-    advanceStep(room); // end -> untap próximo jogador
-    broadcastRoom(room);
-    // Se virou turno do bot, inicia IA
-    if (room.isBot && room.turn === room.botIdx) {
-      setTimeout(() => runBotTurn(room, room.botIdx, room.botDifficulty), 800);
-    }
-  });
-
-  // ── Advance Step ──
-  socket.on("advance_step", () => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room || room.turn !== idx || room.step === "waiting") return;
-    advanceStep(room);
-    broadcastRoom(room);
-    // Se virou turno do bot, inicia IA
-    if (room.isBot && room.turn === room.botIdx && room.step === "upkeep") {
-      setTimeout(() => runBotTurn(room, room.botIdx, room.botDifficulty), 800);
-    }
-  });
-
-  // ── Draw Card (draw step) ──
-  socket.on("draw_card", () => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room || room.turn !== idx || room.step !== "draw") return;
-    room.players[idx] = drawCards(room.players[idx], 1);
-    addLog(room, `📖 ${room.players[idx].name} compra uma carta`, "draw");
-    advanceStep(room);
-    broadcastRoom(room);
-  });
-
-  // ── Toggle Attacker ──
-  socket.on("toggle_attacker", ({ cardUid }) => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room || room.turn !== idx || room.combatPhase !== "declare_attackers") return;
-    const card = room.players[idx].battlefield.find(c => c.uid === cardUid);
-    if (!card || card.type !== "creature" || card.tapped || card.summoningSick) return;
-    if (room.attackers.includes(cardUid)) {
-      room.attackers = room.attackers.filter(u => u !== cardUid);
-    } else {
-      room.attackers.push(cardUid);
-    }
-    broadcastRoom(room);
-  });
-
-  // ── Declare Attackers ──
-  socket.on("declare_attackers", () => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room || room.turn !== idx || room.combatPhase !== "declare_attackers") return;
-    // tap attackers
-    room.players[idx].battlefield = room.players[idx].battlefield.map(c =>
-      room.attackers.includes(c.uid) ? { ...c, tapped: true } : c
-    );
-    if (room.attackers.length === 0) {
-      addLog(room, `🛡️ ${room.players[idx].name} não ataca`, "info");
-      room.combatPhase = null;
-      advanceStep(room);
-    } else {
-      addLog(room, `⚔️ ${room.players[idx].name} ataca com ${room.attackers.length} criatura(s)!`, "combat");
-      room.combatPhase = "declare_blockers";
-    }
-    broadcastRoom(room);
-  });
-
-  // ── Toggle Blocker ──
-  socket.on("toggle_blocker", ({ blockerUid, attackerUid }) => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room || room.turn === idx || room.combatPhase !== "declare_blockers") return;
-    const card = room.players[idx].battlefield.find(c => c.uid === blockerUid);
-    if (!card || card.type !== "creature" || card.tapped) return;
-    // cant_block: Goblin Raider não pode bloquear
-    if ((card.abilities || []).includes("cant_block")) return;
-    // remove this blocker from any previous assignment
-    for (const k of Object.keys(room.blockers)) {
-      if (room.blockers[k] === blockerUid) delete room.blockers[k];
-    }
-    if (attackerUid) room.blockers[attackerUid] = blockerUid;
-    broadcastRoom(room);
-  });
-
-  // ── Declare Blockers ──
-  socket.on("declare_blockers", () => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room || room.turn === idx || room.combatPhase !== "declare_blockers") return;
-    addLog(room, `🛡️ ${room.players[idx].name} declara bloqueadores`, "combat");
-    resolveCombat(room);
-    advanceStep(room); // go to main2
-    broadcastRoom(room);
-  });
-
-  // ── Pump Creature (Shivan Dragon: R → +1/+0 até fim do turno) ──
-  socket.on("pump_creature_ability", ({ cardUid }) => {
-    const code = socket.data.roomCode;
-    const idx = socket.data.playerIndex;
-    const room = rooms[code];
-    if (!room || room.turn !== idx) return;
-    const player = room.players[idx];
-    const card = player.battlefield.find(c => c.uid === cardUid);
-    if (!card || !(card.abilities||[]).includes("pump_R")) return;
-    if ((player.manaPool.R || 0) < 1) { return; }
-    player.manaPool.R -= 1;
-    player.battlefield = player.battlefield.map(c =>
-      c.uid === cardUid ? { ...c, power: (c.power||0) + 1, _pumped: (c._pumped||0) + 1 } : c
-    );
-    addLog(room, `🔥 ${card.name} recebe +1/+0! (agora ${card.power+1}/${card.toughness})`, "spell");
-    broadcastRoom(room);
-  });
-
-  // ── Disconnect ──
-  socket.on("disconnect", () => {
-    const code = socket.data.roomCode;
-    if (code && rooms[code]) {
-      const room = rooms[code];
-      addLog(room, `⚠️ Um jogador desconectou`, "error");
-      broadcastRoom(room);
-      // cleanup after 5 min
-      setTimeout(() => { if (rooms[code]) delete rooms[code]; }, 5 * 60 * 1000);
-    }
-  });
-});
-
-// ─── HEALTH ──────────────────────────────────────────────────
-app.get("/", (req, res) => res.json({ status: "ok", rooms: Object.keys(rooms).length }));
-
-const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`🧙 Magic Server running on port ${PORT}`));
