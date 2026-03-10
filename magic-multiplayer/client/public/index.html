@@ -42,41 +42,128 @@
         background: #060809;
       }
 
-      #rotate-msg { display: none; }
+      #install-screen { display: none; }
 
+      /* Mostra tela de instalação em celular portrait */
       @media screen and (orientation: portrait) and (max-width: 900px) {
-        #rotate-msg {
+        #install-screen {
           display: flex;
           position: fixed;
           inset: 0;
-          background: #060809;
-          color: #c9a84c;
-          font-family: serif;
-          font-size: 22px;
+          background: radial-gradient(ellipse at 50% 40%, #0c1828, #030710);
+          color: #e8d5a3;
+          font-family: 'Cinzel', Georgia, serif;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 16px;
+          gap: 20px;
           z-index: 99999;
+          padding: 30px;
+          text-align: center;
         }
         #root { display: none; }
+      }
+
+      #install-btn {
+        background: linear-gradient(135deg, #1a0a20, #3a1050);
+        border: 2px solid #8a30c0;
+        color: #c060f0;
+        padding: 16px 36px;
+        border-radius: 10px;
+        cursor: pointer;
+        font-family: 'Cinzel', Georgia, serif;
+        font-size: 16px;
+        letter-spacing: .08em;
+        display: none;
+      }
+
+      #ios-hint {
+        font-size: 13px;
+        color: #4a3a5a;
+        line-height: 1.6;
+        display: none;
+      }
+
+      #rotate-hint {
+        font-size: 13px;
+        color: #4a3a5a;
       }
     </style>
   </head>
   <body>
     <noscript>Você precisa habilitar JavaScript para jogar.</noscript>
 
-    <!-- Mensagem para girar o celular -->
-    <div id="rotate-msg">
-      <div style="font-size:48px">📱➡️</div>
-      <div>Gire o celular para jogar</div>
-      <div style="font-size:14px;color:#8a6a2a">O jogo funciona em modo paisagem</div>
+    <!-- Tela de instalação (aparece em celular portrait) -->
+    <div id="install-screen">
+      <div style="font-size:56px;filter:drop-shadow(0 0 30px #c9a84c)">⚔️</div>
+      <div>
+        <div style="font-size:26px;font-weight:900;background:linear-gradient(180deg,#f0d48a,#c9a84c);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:.05em">DALAS GAMES</div>
+        <div style="font-size:11px;color:#4a3a1a;letter-spacing:.3em;margin-top:4px">CARD BATTLE</div>
+      </div>
+
+      <!-- Botão de instalar (Android/Chrome) -->
+      <button id="install-btn" onclick="installApp()">
+        📲 Instalar o App
+      </button>
+
+      <!-- Instrução iOS (Safari) -->
+      <div id="ios-hint">
+        <div style="font-size:28px">📤</div>
+        <div>Toque em <strong style="color:#c9a84c">Compartilhar</strong></div>
+        <div>e depois em <strong style="color:#c9a84c">"Adicionar à Tela de Início"</strong></div>
+        <div style="margin-top:8px;font-size:11px;color:#3a2a12">para instalar o jogo como app</div>
+      </div>
+
+      <!-- Fallback: girar o celular -->
+      <div id="rotate-hint">
+        <div style="font-size:32px">🔄</div>
+        <div style="font-size:15px;color:#c9a84c">Gire o celular</div>
+        <div style="font-size:12px;color:#4a3a1a;margin-top:4px">ou instale como app para jogar</div>
+      </div>
     </div>
 
     <div id="root"></div>
 
-    <!-- PWA: registra service worker -->
     <script>
+      // Captura o evento de instalação do PWA (Android/Chrome)
+      let deferredPrompt = null;
+
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        // Mostra o botão de instalar
+        document.getElementById('install-btn').style.display = 'block';
+        document.getElementById('rotate-hint').style.display = 'none';
+        document.getElementById('ios-hint').style.display = 'none';
+      });
+
+      function installApp() {
+        if (deferredPrompt) {
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.then((result) => {
+            if (result.outcome === 'accepted') {
+              document.getElementById('install-screen').style.display = 'none';
+            }
+            deferredPrompt = null;
+          });
+        }
+      }
+
+      // Detecta iOS (Safari não tem beforeinstallprompt)
+      const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      const isInStandaloneMode = window.navigator.standalone === true;
+
+      if (isIOS && !isInStandaloneMode) {
+        document.getElementById('ios-hint').style.display = 'block';
+        document.getElementById('rotate-hint').style.display = 'none';
+      }
+
+      // Se já está instalado como PWA, esconde a tela de instalação
+      if (isInStandaloneMode || window.matchMedia('(display-mode: standalone)').matches) {
+        document.getElementById('install-screen').style.display = 'none';
+      }
+
+      // Registra o Service Worker
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker
