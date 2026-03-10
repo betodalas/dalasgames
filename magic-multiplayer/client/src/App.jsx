@@ -370,19 +370,24 @@ export default function App() {
         @keyframes tgt{0%,100%{box-shadow:0 0 10px #55efc460}50%{box-shadow:0 0 26px #55efc4}}
         @keyframes fadeIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
         .hcard{transition:transform .18s,box-shadow .18s,border-color .18s;}
-        .hcard:hover{transform:translateY(-18px) scale(1.07)!important;z-index:200!important;}
         .bcard{transition:transform .15s,box-shadow .15s;}
-        .bcard:hover{transform:scale(1.1);z-index:60;}
+        @media (hover: hover) {
+          .hcard:hover{transform:translateY(-18px) scale(1.07)!important;z-index:200!important;}
+          .bcard:hover{transform:scale(1.1);z-index:60;}
+        }
+        #card-preview { display: flex; }
+        @media (hover: none), (max-width: 900px) {
+          #card-preview { display: none !important; }
+          .step-desc { display: none !important; }
+        }
       `}</style>
 
-      {/* ZOOM PREVIEW — painel grande com detalhes em português */}
+      {/* ZOOM PREVIEW — só no desktop */}
       {hovered?.name && (
-        <div style={{position:"fixed",left:"14px",bottom:"160px",zIndex:600,pointerEvents:"none",animation:"fadeIn .12s ease",display:"flex",gap:"10px",alignItems:"flex-start"}}>
-          {/* Imagem grande */}
+        <div id="card-preview" style={{position:"fixed",left:"14px",bottom:"160px",zIndex:600,pointerEvents:"none",animation:"fadeIn .12s ease",gap:"10px",alignItems:"flex-start"}}>
           <div style={{width:"280px",height:"392px",borderRadius:"14px",overflow:"hidden",boxShadow:"0 24px 64px rgba(0,0,0,.98),0 0 60px rgba(0,0,0,.7)",border:"2px solid #c9a84c",flexShrink:0}}>
             <CardImage name={hovered.name} />
           </div>
-          {/* Painel de info em português */}
           <div style={{width:"200px",background:"linear-gradient(160deg,#0a0e18,#111820)",border:"1px solid #1e2e40",borderRadius:"12px",padding:"14px",boxShadow:"0 12px 40px rgba(0,0,0,.9)",fontSize:"12px",color:"#c8d8e8",display:"flex",flexDirection:"column",gap:"8px"}}>
             <div style={{fontFamily:"'Cinzel',serif",fontWeight:"700",fontSize:"14px",color:"#f0d48a",borderBottom:"1px solid #1e2e40",paddingBottom:"8px",lineHeight:"1.3"}}>{CARD_PT[hovered.name]?.nome || hovered.name}</div>
             <div style={{fontSize:"10px",color:"#6a8aaa",letterSpacing:".08em"}}>{CARD_PT[hovered.name]?.tipo || tipoPT(hovered)}</div>
@@ -547,9 +552,9 @@ function Steps({step, turn, tn, mi}) {
           </div>
         ))}
       </div>
-      {/* Caixa de descrição da fase atual */}
-      <div style={{marginTop:"6px",background:"rgba(0,0,0,.5)",border:`1px solid ${STEP_COLORS[tooltip||step]||"#1a2a3a"}`,borderRadius:"6px",padding:"6px 8px",fontSize:"9px",color:"#8ab0c8",lineHeight:"1.5",minHeight:"42px",transition:"border-color .2s",wordBreak:"break-word",overflowWrap:"break-word",textAlign:"left"}}>
-        <div style={{color:STEP_COLORS[tooltip||step],fontWeight:"700",fontSize:"10px",marginBottom:"2px"}}>{STEP_LABELS[tooltip||step]}</div>
+      {/* Caixa de descrição da fase — escondida em mobile */}
+      <div style={{marginTop:"4px",background:"rgba(0,0,0,.5)",border:`1px solid ${STEP_COLORS[tooltip||step]||"#1a2a3a"}`,borderRadius:"6px",padding:"5px 7px",fontSize:"9px",color:"#8ab0c8",lineHeight:"1.4",transition:"border-color .2s",wordBreak:"break-word",overflowWrap:"break-word",textAlign:"left"}} className="step-desc">
+        <div style={{color:STEP_COLORS[tooltip||step],fontWeight:"700",fontSize:"9px",marginBottom:"1px"}}>{STEP_LABELS[tooltip||step]}</div>
         <div>{STEP_DESC[tooltip||step]}</div>
       </div>
     </div>
